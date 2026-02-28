@@ -10,7 +10,7 @@
     "build": "electron-builder --win",
     "build:dir": "electron-builder --win --dir",
     "pack": "electron-builder --win --dir",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "echo Native modules use prebuilt binaries — no rebuild needed"
   },
   "dependencies": {
     "electron-store": "8.2.0",
@@ -24,6 +24,7 @@
     "vitest": "^3.0.0"
   },
   "build": {
+    "npmRebuild": false,
     "appId": "com.openvoice.app",
     "productName": "OpenVoice",
     "win": {
