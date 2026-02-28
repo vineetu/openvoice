@@ -14,6 +14,7 @@ let whisperEngine;
 let audioCapture;
 let hotkeyStateMachine;
 let currentStatus = 'idle';
+let isQuitting = false;
 
 function getAppDataPath() {
   return path.join(app.getPath('userData'));
@@ -107,10 +108,15 @@ function registerHotkey() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 420,
-    height: 560,
+    width: 680,
+    height: 720,
     show: false,
-    resizable: false,
+    resizable: true,
+    minWidth: 580,
+    minHeight: 600,
+    frame: false,
+    titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 16, y: 16 },
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
       contextIsolation: true,
@@ -121,9 +127,11 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   mainWindow.on('close', (event) => {
-    // Hide to tray instead of quitting
-    event.preventDefault();
-    mainWindow.hide();
+    if (!isQuitting) {
+      // Hide to tray instead of quitting
+      event.preventDefault();
+      mainWindow.hide();
+    }
   });
 
   mainWindow.on('ready-to-show', () => {
@@ -159,20 +167,54 @@ async function initWhisper() {
 }
 
 // IPC handlers
+const WRITABLE_SETTINGS = new Set(['hotkey', 'autoPaste', 'startWithWindows']);
+const VALID_HOTKEY = /^(Ctrl\+|Alt\+|Shift\+|Super\+|CmdOrCtrl\+)+(F\d{1,2}|[A-Z]|Space|[0-9])$/;
+
 ipcMain.handle('get-status', () => currentStatus);
-ipcMain.handle('get-settings', () => getAllSettings());
+ipcMain.handle('get-settings', () => ({
+  hotkey: getSetting('hotkey'),
+  autoPaste: getSetting('autoPaste'),
+  startWithWindows: getSetting('startWithWindows'),
+}));
 ipcMain.handle('set-setting', (_event, key, value) => {
-  setSetting(key, value);
+  if (!WRITABLE_SETTINGS.has(key)) {
+    throw new Error(`Setting not allowed: ${key}`);
+  }
   if (key === 'hotkey') {
+    if (typeof value !== 'string' || !VALID_HOTKEY.test(value)) {
+      throw new Error(`Invalid hotkey format: ${value}`);
+    }
+    setSetting(key, value);
     globalShortcut.unregisterAll();
     registerHotkey();
+    return;
+  }
+  if (key === 'autoPaste' || key === 'startWithWindows') {
+    setSetting(key, !!value);
   }
   if (key === 'startWithWindows') {
     app.setLoginItemSettings({ openAtLogin: !!value });
   }
 });
 ipcMain.handle('get-dictionary', () => getSetting('dictionary'));
-ipcMain.handle('set-dictionary', (_event, dict) => setSetting('dictionary', dict));
+
+// Fix #2: Validate dictionary input
+ipcMain.handle('set-dictionary', (_event, dict) => {
+  if (typeof dict !== 'object' || dict === null || Array.isArray(dict)) {
+    throw new Error('Invalid dictionary');
+  }
+  const entries = Object.entries(dict);
+  if (entries.length > 500) throw new Error('Dictionary too large');
+  for (const [k, v] of entries) {
+    if (typeof k !== 'string' || typeof v !== 'string') {
+      throw new Error('Dictionary entries must be strings');
+    }
+    if (k.length > 200 || v.length > 200) {
+      throw new Error('Dictionary entry too long');
+    }
+  }
+  setSetting('dictionary', dict);
+});
 
 // App lifecycle
 app.whenReady().then(async () => {
@@ -191,7 +233,7 @@ app.whenReady().then(async () => {
       }
     },
     onQuit: () => {
-      mainWindow.destroy();
+      isQuitting = true;
       app.quit();
     },
   });
@@ -221,6 +263,10 @@ app.whenReady().then(async () => {
       mainWindow.show();
     }
   }
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
 });
 
 app.on('will-quit', () => {

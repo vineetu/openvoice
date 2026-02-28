@@ -1,7 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
-const http = require('http');
+
+const ALLOWED_DOWNLOAD_HOSTS = new Set([
+  'huggingface.co',
+  'cdn-lfs.huggingface.co',
+  'cdn-lfs-us-1.huggingface.co',
+]);
 
 const MODEL_URLS = {
   'ggml-distil-large-v3.5.bin':
@@ -13,7 +18,15 @@ function getModelUrl(modelName) {
 }
 
 function getModelPath(baseDir, modelName) {
-  return path.join(baseDir, 'models', modelName);
+  if (typeof modelName !== 'string' || modelName.includes('/') || modelName.includes('\\') || modelName.includes('..')) {
+    throw new Error(`Invalid model name: ${modelName}`);
+  }
+  const modelsDir = path.resolve(path.join(baseDir, 'models'));
+  const resolved = path.resolve(path.join(modelsDir, modelName));
+  if (!resolved.startsWith(modelsDir + path.sep)) {
+    throw new Error('Path traversal detected in model name');
+  }
+  return resolved;
 }
 
 function modelExists(baseDir, modelName) {
@@ -49,8 +62,21 @@ function downloadModel(baseDir, modelName, onProgress) {
         return;
       }
 
-      const client = requestUrl.startsWith('https') ? https : http;
-      client.get(requestUrl, (response) => {
+      let parsed;
+      try { parsed = new URL(requestUrl); } catch {
+        reject(new Error(`Invalid URL: ${requestUrl}`));
+        return;
+      }
+      if (parsed.protocol !== 'https:') {
+        reject(new Error('Only HTTPS downloads are allowed'));
+        return;
+      }
+      if (!ALLOWED_DOWNLOAD_HOSTS.has(parsed.hostname)) {
+        reject(new Error(`Untrusted download host: ${parsed.hostname}`));
+        return;
+      }
+
+      https.get(requestUrl, (response) => {
         if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           followRedirects(response.headers.location, redirectCount + 1);
           return;

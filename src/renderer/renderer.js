@@ -13,13 +13,13 @@ const dictKeyInput = document.getElementById('dict-key');
 const dictValueInput = document.getElementById('dict-value');
 const dictAddBtn = document.getElementById('dict-add-btn');
 
-// ---- Tabs ----
-document.querySelectorAll('.panel-tab').forEach((tab) => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.panel-tab').forEach((t) => t.classList.remove('active'));
-    document.querySelectorAll('.panel-content').forEach((c) => c.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+// ---- Sidebar navigation ----
+document.querySelectorAll('.nav-item').forEach((item) => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach((n) => n.classList.remove('active'));
+    document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById(`view-${item.dataset.view}`).classList.add('active');
   });
 });
 
@@ -33,10 +33,8 @@ const STATUS_MAP = {
 };
 
 function setUIStatus(status) {
-  // Remove all state classes
   document.body.classList.remove('recording', 'transcribing', 'error');
 
-  // Check for error state
   if (status.startsWith('error:')) {
     document.body.classList.add('error');
     const msg = status.replace(/^error:\s*/, '');
@@ -53,7 +51,6 @@ function setUIStatus(status) {
     document.body.classList.add(map.bodyClass);
   }
 
-  // Show/hide download section
   downloadSection.classList.toggle('hidden', !status.includes('download'));
 }
 
@@ -116,21 +113,27 @@ function renderDictionary() {
   for (const [key, value] of Object.entries(dictionary)) {
     const row = document.createElement('div');
     row.className = 'dict-row';
-    row.innerHTML = `
-      <span class="key">${escapeHtml(key)}</span>
-      <span class="arrow">&rarr;</span>
-      <span class="value">${escapeHtml(value)}</span>
-      <button class="delete-btn">&times;</button>
-    `;
-    row.querySelector('.delete-btn').addEventListener('click', () => deleteDictEntry(key));
+
+    const keySpan = document.createElement('span');
+    keySpan.className = 'key';
+    keySpan.textContent = key;
+
+    const arrowSpan = document.createElement('span');
+    arrowSpan.className = 'arrow';
+    arrowSpan.innerHTML = '&rarr;';
+
+    const valueSpan = document.createElement('span');
+    valueSpan.className = 'value';
+    valueSpan.textContent = value;
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'delete-btn';
+    deleteBtn.textContent = '\u00D7';
+    deleteBtn.addEventListener('click', () => deleteDictEntry(key));
+
+    row.append(keySpan, arrowSpan, valueSpan, deleteBtn);
     dictEntries.appendChild(row);
   }
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }
 
 function deleteDictEntry(key) {
