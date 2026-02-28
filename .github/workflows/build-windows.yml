@@ -21,15 +21,15 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Download and extract SoX
+      - name: Install SoX via Chocolatey
+        run: choco install sox.portable --version=14.4.1 -y
+
+      - name: Copy SoX to sox-bin for bundling
         shell: pwsh
         run: |
-          $url = "https://sourceforge.net/projects/sox/files/sox/14.4.1/sox-14.4.1a-win32.zip/download"
-          Invoke-WebRequest -Uri $url -OutFile sox.zip -UserAgent "Mozilla/5.0"
-          Expand-Archive -Path sox.zip -DestinationPath sox-extract
+          $chocoToolsDir = "C:\ProgramData\chocolatey\lib\sox.portable\tools"
           New-Item -ItemType Directory -Force -Path sox-bin
-          Copy-Item sox-extract/sox-14.4.1/* sox-bin/ -Recurse
-          Remove-Item sox.zip, sox-extract -Recurse -Force
+          Copy-Item "$chocoToolsDir\*" sox-bin\ -Recurse
 
       - name: Verify SoX binary
         run: sox-bin\sox.exe --version
