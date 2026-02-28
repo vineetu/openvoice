@@ -1,0 +1,57 @@
+{
+  "name": "openvoice",
+  "version": "0.1.0",
+  "description": "Windows voice dictation using local Whisper",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "electron-builder --win",
+    "build:dir": "electron-builder --win --dir",
+    "pack": "electron-builder --win --dir",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "electron-store": "8.2.0",
+    "@kutalia/whisper-node-addon": "^1.1.0",
+    "@hurdlegroup/robotjs": "^0.12.0",
+    "node-record-lpcm16": "^1.0.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0",
+    "vitest": "^3.0.0"
+  },
+  "build": {
+    "appId": "com.openvoice.app",
+    "productName": "OpenVoice",
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "models/",
+        "to": "models/",
+        "filter": ["**/*.bin"]
+      },
+      {
+        "from": "assets/",
+        "to": "assets/"
+      },
+      {
+        "from": "sox-bin/",
+        "to": "sox-bin/"
+      }
+    ]
+  }
+}

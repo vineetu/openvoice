@@ -1,0 +1,53 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Download and extract SoX
+        shell: pwsh
+        run: |
+          $url = "https://sourceforge.net/projects/sox/files/sox/14.4.1/sox-14.4.1a-win32.zip/download"
+          Invoke-WebRequest -Uri $url -OutFile sox.zip -UserAgent "Mozilla/5.0"
+          Expand-Archive -Path sox.zip -DestinationPath sox-extract
+          New-Item -ItemType Directory -Force -Path sox-bin
+          Copy-Item sox-extract/sox-14.4.1/* sox-bin/ -Recurse
+          Remove-Item sox.zip, sox-extract -Recurse -Force
+
+      - name: Verify SoX binary
+        run: sox-bin\sox.exe --version
+
+      - name: Build Windows installer
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenVoice-Windows-Installer
+          path: dist/OpenVoice-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Upload unpacked build
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenVoice-Windows-Unpacked
+          path: dist/win-unpacked/

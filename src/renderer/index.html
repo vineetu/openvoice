@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com">
+  <title>OpenVoice</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Ambient background layers -->
+    <div class="bg-noise"></div>
+    <div class="bg-glow"></div>
+
+    <!-- Title bar area -->
+    <header class="titlebar">
+      <span class="titlebar-label">OpenVoice</span>
+      <span id="status-text-mini" class="titlebar-status">Ready</span>
+    </header>
+
+    <!-- Hero: Voice Orb -->
+    <section class="hero">
+      <div id="orb-container" class="orb-container">
+        <div class="orb-ring orb-ring-outer"></div>
+        <div class="orb-ring orb-ring-middle"></div>
+        <div class="orb-ring orb-ring-inner"></div>
+        <div id="orb" class="orb">
+          <div class="orb-core"></div>
+        </div>
+        <!-- Waveform bars (visible during recording) -->
+        <div id="waveform" class="waveform">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <div id="status-label" class="status-label">Ready to listen</div>
+      <div id="hotkey-hint" class="hotkey-hint">
+        <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd>
+      </div>
+    </section>
+
+    <!-- Download Progress (shown during model download) -->
+    <section id="download-section" class="download-section hidden">
+      <div class="download-card">
+        <div class="download-header">
+          <span class="download-icon">&#9675;</span>
+          <span>Downloading Whisper model...</span>
+        </div>
+        <div class="progress-track">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <div class="download-meta">
+          <span id="progress-text">0%</span>
+          <span id="progress-size" class="download-size"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Transcription Card -->
+    <section id="transcription-section" class="transcription-section">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-label">Transcription</span>
+          <span id="transcription-timestamp" class="card-meta"></span>
+        </div>
+        <div id="transcription-text" class="transcription-text">
+          Press your hotkey to start dictating
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom Panel: Tabs -->
+    <section class="panel">
+      <nav class="panel-tabs">
+        <button class="panel-tab active" data-tab="dictionary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Dictionary
+        </button>
+        <button class="panel-tab" data-tab="settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          Settings
+        </button>
+      </nav>
+
+      <!-- Dictionary Tab -->
+      <div id="dictionary-tab" class="panel-content active">
+        <div id="dict-entries" class="dict-entries"></div>
+        <div id="dict-empty" class="dict-empty">
+          <span class="dict-empty-icon">&#128218;</span>
+          <p>No custom words yet</p>
+          <p class="dict-empty-hint">Add words Whisper gets wrong</p>
+        </div>
+        <div class="dict-form">
+          <input id="dict-key" type="text" placeholder="Heard as..." class="dict-input">
+          <input id="dict-value" type="text" placeholder="Replace with..." class="dict-input">
+          <button id="dict-add-btn" class="btn-add">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div id="settings-tab" class="panel-content">
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">Hotkey</span>
+            <span class="setting-desc">Trigger recording</span>
+          </div>
+          <div class="setting-control">
+            <input id="setting-hotkey" type="text" readonly class="hotkey-display">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">Auto-paste</span>
+            <span class="setting-desc">Paste into active window</span>
+          </div>
+          <div class="setting-control">
+            <label class="toggle">
+              <input id="setting-autopaste" type="checkbox">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">Launch on startup</span>
+            <span class="setting-desc">Start with Windows</span>
+          </div>
+          <div class="setting-control">
+            <label class="toggle">
+              <input id="setting-startup" type="checkbox">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script src="renderer.js"></script>
+</body>
+</html>
