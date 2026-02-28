@@ -16,7 +16,13 @@ describe('model-downloader', () => {
 
   it('returns model path under provided base dir', () => {
     const p = getModelPath('/fake/appdata', 'ggml-distil-large-v3.5.bin');
-    expect(p).toBe(path.join('/fake/appdata', 'models', 'ggml-distil-large-v3.5.bin'));
+    expect(p).toBe(path.resolve('/fake/appdata', 'models', 'ggml-distil-large-v3.5.bin'));
+  });
+
+  it('rejects path traversal in model name', () => {
+    expect(() => getModelPath('/fake/appdata', '../etc/passwd')).toThrow('Invalid model name');
+    expect(() => getModelPath('/fake/appdata', 'foo/bar.bin')).toThrow('Invalid model name');
+    expect(() => getModelPath('/fake/appdata', 'foo\\bar.bin')).toThrow('Invalid model name');
   });
 
   it('rejects downloadModel for unknown model name', async () => {
