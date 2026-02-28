@@ -27,13 +27,18 @@ jobs:
       - name: Copy SoX to sox-bin for bundling
         shell: pwsh
         run: |
-          $chocoToolsDir = "C:\ProgramData\chocolatey\lib\sox.portable\tools"
+          $soxExe = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\sox.portable" -Recurse -Filter "sox.exe" | Select-Object -First 1
+          Write-Host "Found sox.exe at: $($soxExe.FullName)"
+          $sourceDir = $soxExe.DirectoryName
+          Write-Host "Copying from: $sourceDir"
           New-Item -ItemType Directory -Force -Path sox-bin
-          Copy-Item "$chocoToolsDir\*" sox-bin\ -Recurse
+          Copy-Item "$sourceDir\*" sox-bin\ -Recurse
+          Write-Host "sox-bin contents:"
+          Get-ChildItem sox-bin
 
       - name: Verify SoX binary
         shell: cmd
-        run: sox-bin\sox.exe --version
+        run: .\sox-bin\sox.exe --version
 
       - name: Build Windows installer
         run: npm run build
