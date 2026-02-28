@@ -32,6 +32,7 @@ jobs:
           Copy-Item "$chocoToolsDir\*" sox-bin\ -Recurse
 
       - name: Verify SoX binary
+        shell: cmd
         run: sox-bin\sox.exe --version
 
       - name: Build Windows installer
