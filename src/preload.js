@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('openvoice', {
   setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
   getDictionary: () => ipcRenderer.invoke('get-dictionary'),
   setDictionary: (dict) => ipcRenderer.invoke('set-dictionary', dict),
+  pickModelFolder: () => ipcRenderer.invoke('pick-model-folder'),
+  startDownload: (folder) => ipcRenderer.invoke('start-download', folder),
 
   onStatusChange: (callback) => {
     ipcRenderer.on('status-changed', (_event, status) => callback(status));

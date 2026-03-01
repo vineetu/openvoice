@@ -13,6 +13,59 @@
   <!-- Custom titlebar for dragging -->
   <div class="titlebar-drag-region"></div>
 
+  <!-- Setup Screen (shown on first launch / model missing) -->
+  <div id="setup-screen" class="setup-screen hidden">
+    <div class="setup-content">
+      <div class="setup-icon">
+        <img src="../../assets/icon.png" width="48" height="48" alt="OpenVoice">
+      </div>
+      <h1 class="setup-title">Welcome to OpenVoice</h1>
+      <p class="setup-subtitle">Private voice dictation — 100% local</p>
+
+      <div class="setup-info-card">
+        <div class="setup-info-row">
+          <span class="setup-info-label">Model</span>
+          <span class="setup-info-value">Distil-Whisper Large v3.5</span>
+        </div>
+        <div class="setup-info-row">
+          <span class="setup-info-label">Size</span>
+          <span class="setup-info-value">~1.5 GB</span>
+        </div>
+        <div class="setup-info-row">
+          <span class="setup-info-label">Privacy</span>
+          <span class="setup-info-value">Runs entirely on your machine</span>
+        </div>
+      </div>
+
+      <div class="setup-folder-section">
+        <label class="setup-folder-label">Choose where to save</label>
+        <div class="setup-folder-row">
+          <input id="setup-folder-path" type="text" readonly class="setup-folder-input" value="Default (AppData)">
+          <button id="setup-browse-btn" class="setup-browse-btn">Browse...</button>
+        </div>
+      </div>
+
+      <button id="setup-download-btn" class="setup-download-btn">Download Model</button>
+
+      <div id="setup-progress" class="setup-progress hidden">
+        <div class="setup-progress-track">
+          <div id="setup-progress-fill" class="setup-progress-fill"></div>
+        </div>
+        <div class="setup-progress-meta">
+          <span id="setup-progress-text">0%</span>
+          <span id="setup-progress-size"></span>
+        </div>
+      </div>
+
+      <div id="setup-loading" class="setup-loading hidden">
+        <div class="setup-loading-spinner"></div>
+        <span>Loading model...</span>
+      </div>
+
+      <div id="setup-error" class="setup-error hidden"></div>
+    </div>
+  </div>
+
   <div id="app">
     <!-- Sidebar -->
     <aside class="sidebar">
@@ -149,6 +202,7 @@
             </div>
             <div class="setting-control">
               <input id="setting-hotkey" type="text" readonly class="hotkey-display">
+              <span id="hotkey-error" class="hotkey-error"></span>
             </div>
           </div>
           <div class="setting-row">

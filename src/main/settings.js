@@ -7,6 +7,7 @@ const DEFAULTS = {
   modelName: 'ggml-distil-large-v3.5.bin',
   modelDownloaded: false,
   firstLaunchDone: false,
+  modelStoragePath: '',
 };
 
 let store = null;

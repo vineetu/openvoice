@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, systemPreferences } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, systemPreferences, dialog } = require('electron');
 const path = require('path');
 const { HotkeyStateMachine } = require('./hotkey-state-machine');
 const { WhisperEngine } = require('./whisper-engine');
@@ -18,6 +18,11 @@ let isQuitting = false;
 
 function getAppDataPath() {
   return path.join(app.getPath('userData'));
+}
+
+function getModelBaseDir() {
+  const storagePath = getSetting('modelStoragePath');
+  return storagePath || getAppDataPath();
 }
 
 function setStatus(status) {
@@ -144,26 +149,23 @@ function createWindow() {
 async function initWhisper() {
   whisperEngine = new WhisperEngine();
   const modelName = getSetting('modelName');
-  const modelPath = getModelPath(getAppDataPath(), modelName);
+  const baseDir = getModelBaseDir();
 
-  if (!modelExists(getAppDataPath(), modelName)) {
-    setStatus('downloading model');
+  if (!modelExists(baseDir, modelName)) {
+    // Model not found — show setup screen and wait for user action
+    setStatus('needs-setup');
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
     }
-
-    await downloadModel(getAppDataPath(), modelName, (progress) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('download-progress', progress);
-      }
-    });
-
-    setSetting('modelDownloaded', true);
+    return false; // Signal that model is not ready
   }
 
+  // Model exists — load it
+  const modelPath = getModelPath(baseDir, modelName);
   setStatus('loading model');
   await whisperEngine.loadModel(modelPath);
   setStatus('idle');
+  return true; // Signal that model is ready
 }
 
 // IPC handlers
@@ -197,6 +199,50 @@ ipcMain.handle('set-setting', (_event, key, value) => {
   }
 });
 ipcMain.handle('get-dictionary', () => getSetting('dictionary'));
+
+ipcMain.handle('pick-model-folder', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+    title: 'Choose where to save the model',
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle('start-download', async (_event, folder) => {
+  const modelName = getSetting('modelName');
+
+  // Save chosen folder if provided
+  if (folder) {
+    setSetting('modelStoragePath', folder);
+  }
+
+  const baseDir = getModelBaseDir();
+  const modelPath = getModelPath(baseDir, modelName);
+
+  try {
+    setStatus('downloading model');
+    await downloadModel(baseDir, modelName, (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('download-progress', progress);
+      }
+    });
+
+    setSetting('modelDownloaded', true);
+
+    setStatus('loading model');
+    await whisperEngine.loadModel(modelPath);
+
+    // Register hotkey now that model is ready
+    registerHotkey();
+    setSetting('firstLaunchDone', true);
+    setStatus('idle');
+  } catch (err) {
+    setStatus('needs-setup');
+    throw err;
+  }
+});
 
 // Fix #2: Validate dictionary input
 ipcMain.handle('set-dictionary', (_event, dict) => {
@@ -252,9 +298,11 @@ app.whenReady().then(async () => {
   }
 
   try {
-    await initWhisper();
-    registerHotkey();
-    setSetting('firstLaunchDone', true);
+    const modelReady = await initWhisper();
+    if (modelReady) {
+      registerHotkey();
+      setSetting('firstLaunchDone', true);
+    }
   } catch (err) {
     console.error('Initialization failed:', err);
     setStatus('error: ' + err.message);
