@@ -9,9 +9,10 @@ A Windows desktop app for voice dictation. Press a hotkey, speak, and transcribe
 ```
 Electron App (Windows)
 ├── Main Process
-│   ├── GlobalShortcut (hotkey detection + state machine)
-│   ├── WhisperEngine (@kutalia/whisper-node-addon, model pre-loaded)
-│   ├── AudioCapture (16kHz mono PCM via node-record-lpcm16)
+│   ├── HotkeyManager (node-global-key-listener for keydown/keyup detection)
+│   ├── HotkeyStateMachine (pure logic: PTT vs toggle mode)
+│   ├── WhisperEngine (@kutalia/whisper-node-addon)
+│   ├── AudioCapture (Web Audio API → Float32Array PCM)
 │   ├── TextOutput (clipboard.writeText + robotjs Ctrl+V)
 │   ├── Dictionary (JSON word replacement, post-processing)
 │   ├── Tray (system tray icon + context menu)
@@ -28,26 +29,51 @@ Electron App (Windows)
 | Package | Purpose |
 |---|---|
 | `electron` (v33+) | App shell |
-| `@kutalia/whisper-node-addon` | Local Whisper inference with pre-loaded model |
+| `@kutalia/whisper-node-addon` | Local Whisper inference (accepts Float32Array PCM directly) |
+| `node-global-key-listener` | Global keydown/keyup detection for PTT |
 | `@hurdlegroup/robotjs` | Simulate Ctrl+V to paste into active window |
-| `node-record-lpcm16` | Microphone capture at 16kHz PCM |
 | `electron-store` | Persist settings and dictionary |
 | `electron-builder` + NSIS | Windows installer |
 
+**Note:** We use Web Audio API (via renderer process) for microphone capture instead of `node-record-lpcm16` to avoid requiring users to install SoX.
+
 ## Whisper Model
 
-**Default model: `distil-large-v3.5`** (English-only)
+**Default model: `distil-large-v3.5`** (English-optimized, multilingual base)
 
 | Property | Value |
 |---|---|
-| GGML file | `ggml-distil-large-v3.5.bin` |
+| GGML file | `ggml-model.bin` |
+| Download URL | `https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/main/ggml-model.bin` |
 | Download size | 1.52 GB |
 | RAM at runtime | ~2 GB |
 | WER (English) | ~2.5% |
-| Speed (i7 CPU) | ~2s for 10s audio, 1.5x faster than large-v3-turbo |
-| Source | `huggingface.co/distil-whisper/distil-large-v3.5` |
+| Speed (i7 CPU) | ~2s for 10s audio |
 
 Downloaded on first launch. Cached in `%APPDATA%/openvoice/models/`.
+
+## Whisper API
+
+The `@kutalia/whisper-node-addon` package has this API (verified from source):
+
+```typescript
+import whisper from '@kutalia/whisper-node-addon'
+
+// Transcribe from Float32Array (preferred — no file I/O)
+const result = await whisper.transcribe({
+  pcmf32: audioFloat32Array,  // 16kHz mono Float32Array
+  model: '/path/to/ggml-model.bin',
+  language: 'en',
+  use_gpu: true,
+  no_timestamps: true,
+});
+
+// Result structure: { transcription: string[][] }
+// Each segment is [startTime, endTime, text]
+const text = result.transcription.map(seg => seg[2]).join(' ');
+```
+
+**Important:** There is no `init()` or `free()` method. The model path is passed to each `transcribe()` call. The addon handles model caching internally.
 
 ## Hotkey System
 
@@ -76,15 +102,41 @@ Single configurable hotkey (default: `Ctrl+Shift+Space`). Two interaction modes 
   TRANSCRIBING ──► IDLE
 ```
 
-Implementation uses `electron.globalShortcut` for registration. Keydown/keyup timing tracked via `node-global-key-listener` (non-blocking, so it doesn't steal the shortcut from other apps).
+### Keyup Detection
+
+Electron's `globalShortcut` only fires on keydown — it does not provide keyup events. For push-to-talk (PTT), we need keyup detection.
+
+**Solution:** Use `node-global-key-listener` which provides both keydown and keyup events globally:
+
+```typescript
+import { GlobalKeyboardListener } from 'node-global-key-listener';
+
+const listener = new GlobalKeyboardListener();
+listener.addListener((event, down) => {
+  if (event.name === 'SPACE' && down['LEFT CTRL'] && down['LEFT SHIFT']) {
+    if (event.state === 'DOWN') {
+      stateMachine.keyDown();
+    } else {
+      stateMachine.keyUp();
+    }
+  }
+});
+```
+
+**Note:** `node-global-key-listener` is currently archived/unmaintained but still functional. Kutalia's electron-speech-to-speech uses it successfully. If stability issues arise, `iohook` is an alternative (requires node-gyp compilation).
 
 ## Audio Pipeline
 
-1. Microphone captured at 16kHz, mono, PCM 16-bit via `node-record-lpcm16`
-2. PCM chunks streamed directly to `@kutalia/whisper-node-addon` (model already in memory)
-3. On recording stop: final transcription returned as a string
+1. Renderer process captures microphone via Web Audio API (`navigator.mediaDevices.getUserMedia`)
+2. AudioWorklet processes raw PCM at 16kHz mono
+3. PCM chunks sent to main process via IPC as Float32Array
+4. On recording stop: accumulated Float32Array passed directly to `whisper.transcribe({ pcmf32 })`
 
-No file I/O in the hot path. No WAV conversion. Direct PCM streaming.
+**No file I/O in the hot path. No WAV conversion. Direct PCM streaming.**
+
+### Why Web Audio API instead of node-record-lpcm16?
+
+`node-record-lpcm16` requires SoX to be installed system-wide (`choco install sox.portable`). This adds friction for users and potential installation issues. Web Audio API is built into Chromium/Electron — zero dependencies.
 
 ## Text Output Pipeline
 
@@ -129,7 +181,7 @@ Main window is optional — can be shown/hidden from tray. Starts hidden after f
 ## First-Launch Experience
 
 1. Welcome screen with brief explanation
-2. Download `distil-large-v3.5` model (1.52 GB, progress bar)
+2. Download model (1.52 GB, progress bar with resume support)
 3. Set hotkey preference (default offered)
 4. Test recording — speak a phrase, see it transcribed
 5. App minimizes to tray, ready to use
@@ -150,13 +202,13 @@ Main window is optional — can be shown/hidden from tray. Starts hidden after f
 - `electron-builder` with NSIS installer (standard Windows installer wizard)
 - No code signing in v1 (users will see SmartScreen warning)
 - Single `.exe` installer output
-- Auto-installs MSVC++ runtime if missing
+- Bundled with MSVC++ runtime
 
 ## Out of Scope (v1)
 
 - Real-time streaming transcription display (we transcribe after recording stops)
 - Cloud API fallback
-- Multi-language support
+- Multi-language support (model supports it, but UI doesn't expose it)
 - Auto-update mechanism
 - Code signing / SmartScreen bypass
 - macOS / Linux support
@@ -166,7 +218,8 @@ Main window is optional — can be shown/hidden from tray. Starts hidden after f
 ## Known Windows Gotchas to Handle
 
 1. **Microphone permission**: Check `systemPreferences.getMediaAccessStatus('microphone')` on startup. Show guidance if denied.
-2. **Global hotkey conflicts**: Check `globalShortcut.register()` return value. Alert user if hotkey is taken.
+2. **Global hotkey conflicts**: Test hotkey registration on startup. Alert user if hotkey is taken.
 3. **SmartScreen warning**: Add a note in README about "More info" → "Run anyway".
 4. **Bluetooth mic selection**: Audio device can be wrong initially. Allow device selection in settings.
 5. **Terminal paste**: Some terminals need `Ctrl+Shift+V` instead of `Ctrl+V`. Could detect in a future version.
+6. **node-global-key-listener permissions**: On some systems, the key listener may need admin privileges or antivirus exceptions.

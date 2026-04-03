@@ -4,9 +4,9 @@
 
 **Goal:** Build a Windows Electron app for voice dictation using local Whisper (distil-large-v3.5), with push-to-talk/toggle hotkey, clipboard paste, and a custom dictionary.
 
-**Architecture:** Electron main process handles hotkeys, audio capture, Whisper inference, and text output. Renderer shows status, settings, and dictionary editor. Pure logic (dictionary, state machine) is separated from platform code for testability.
+**Architecture:** Electron main process handles hotkeys, Whisper inference, and text output. Renderer handles audio capture via Web Audio API and UI. Pure logic (dictionary, state machine) is separated from platform code for testability.
 
-**Tech Stack:** Electron 33+, @kutalia/whisper-node-addon, @hurdlegroup/robotjs, node-record-lpcm16, electron-store, electron-builder (NSIS), Vitest for testing.
+**Tech Stack:** Electron 33+, @kutalia/whisper-node-addon, node-global-key-listener, @hurdlegroup/robotjs, electron-store, electron-builder (NSIS), Vitest for testing.
 
 **Dev Note:** We develop on Linux but target Windows. Native addons (whisper-node-addon, robotjs) require Windows for integration testing. All pure logic modules are fully testable on any platform. Platform modules use interfaces so they can be mocked.
 
@@ -42,6 +42,12 @@ Edit `package.json`:
     "electron": "^33.0.0",
     "electron-builder": "^26.0.0",
     "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@kutalia/whisper-node-addon": "^1.0.0",
+    "@hurdlegroup/robotjs": "^0.6.0",
+    "node-global-key-listener": "^0.3.0",
+    "electron-store": "^10.0.0"
   },
   "build": {
     "appId": "com.openvoice.app",
@@ -482,11 +488,7 @@ git commit -m "feat: add hotkey state machine with PTT and toggle modes"
 - Create: `src/main/settings.js`
 - Create: `tests/settings.test.js`
 
-**Step 1: Install electron-store**
-
-Run: `npm install electron-store`
-
-**Step 2: Write failing tests**
+**Step 1: Write failing tests**
 
 Create `tests/settings.test.js`:
 
@@ -520,29 +522,36 @@ describe('settings defaults', () => {
   });
 
   it('has correct model name', () => {
-    expect(DEFAULTS.modelName).toBe('ggml-distil-large-v3.5.bin');
+    expect(DEFAULTS.modelName).toBe('ggml-model.bin');
+  });
+
+  it('has correct model URL', () => {
+    expect(DEFAULTS.modelUrl).toBe('https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/main/ggml-model.bin');
   });
 });
 ```
 
-**Step 3: Run tests to verify they fail**
+**Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/settings.test.js`
 Expected: FAIL — `DEFAULTS` not found
 
-**Step 4: Write implementation**
+**Step 3: Write implementation**
 
 Create `src/main/settings.js`:
 
 ```js
 const DEFAULTS = {
   hotkey: 'Ctrl+Shift+Space',
+  hotkeyPrimary: 'SPACE',
+  hotkeyModifiers: ['LEFT CTRL', 'LEFT SHIFT'],
   doubleClickThreshold: 300,
   autoPaste: true,
   clipboardRestoreDelay: 150,
   startWithWindows: false,
   dictionary: {},
-  modelName: 'ggml-distil-large-v3.5.bin',
+  modelName: 'ggml-model.bin',
+  modelUrl: 'https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/main/ggml-model.bin',
   modelDownloaded: false,
   firstLaunchDone: false,
 };
@@ -573,15 +582,15 @@ function getAllSettings() {
 module.exports = { DEFAULTS, initStore, getSetting, setSetting, getAllSettings };
 ```
 
-**Step 5: Run tests to verify they pass**
+**Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/settings.test.js`
-Expected: All 7 tests PASS
+Expected: All 8 tests PASS
 
-**Step 6: Commit**
+**Step 5: Commit**
 
 ```bash
-git add src/main/settings.js tests/settings.test.js package.json package-lock.json
+git add src/main/settings.js tests/settings.test.js
 git commit -m "feat: add settings module with electron-store and defaults"
 ```
 
@@ -589,7 +598,7 @@ git commit -m "feat: add settings module with electron-store and defaults"
 
 ### Task 5: Model Downloader
 
-Downloads `distil-large-v3.5` GGML model from Hugging Face on first launch.
+Downloads `distil-large-v3.5` GGML model from Hugging Face on first launch. Supports resume for interrupted downloads.
 
 **Files:**
 - Create: `src/main/model-downloader.js`
@@ -602,18 +611,17 @@ Create `tests/model-downloader.test.js`:
 ```js
 import { describe, it, expect } from 'vitest';
 import { getModelUrl, getModelPath } from '../src/main/model-downloader.js';
+import { DEFAULTS } from '../src/main/settings.js';
 
 describe('model-downloader', () => {
-  it('returns correct Hugging Face URL for distil-large-v3.5', () => {
-    const url = getModelUrl('ggml-distil-large-v3.5.bin');
-    expect(url).toBe(
-      'https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/main/ggml-distil-large-v3.5.bin'
-    );
+  it('returns correct Hugging Face URL', () => {
+    const url = getModelUrl();
+    expect(url).toBe(DEFAULTS.modelUrl);
   });
 
   it('returns model path under provided base dir', () => {
-    const p = getModelPath('/fake/appdata', 'ggml-distil-large-v3.5.bin');
-    expect(p).toBe('/fake/appdata/models/ggml-distil-large-v3.5.bin');
+    const p = getModelPath('/fake/appdata');
+    expect(p).toBe('/fake/appdata/models/ggml-model.bin');
   });
 });
 ```
@@ -632,61 +640,83 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const http = require('http');
+const { DEFAULTS } = require('./settings');
 
-const MODEL_URLS = {
-  'ggml-distil-large-v3.5.bin':
-    'https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/main/ggml-distil-large-v3.5.bin',
-};
-
-function getModelUrl(modelName) {
-  return MODEL_URLS[modelName];
+function getModelUrl() {
+  return DEFAULTS.modelUrl;
 }
 
-function getModelPath(baseDir, modelName) {
-  return path.join(baseDir, 'models', modelName);
+function getModelPath(baseDir) {
+  return path.join(baseDir, 'models', DEFAULTS.modelName);
 }
 
-function modelExists(baseDir, modelName) {
-  return fs.existsSync(getModelPath(baseDir, modelName));
+function modelExists(baseDir) {
+  return fs.existsSync(getModelPath(baseDir));
 }
 
 /**
- * Downloads a model file with progress reporting.
+ * Get file size for resume support
+ */
+function getPartialSize(filePath) {
+  const partialPath = filePath + '.partial';
+  try {
+    const stats = fs.statSync(partialPath);
+    return stats.size;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Downloads a model file with progress reporting and resume support.
  * @param {string} baseDir - App data directory
- * @param {string} modelName - Model filename
  * @param {function} onProgress - Called with { downloaded, total, percent }
  * @returns {Promise<string>} Path to downloaded model
  */
-function downloadModel(baseDir, modelName, onProgress) {
+function downloadModel(baseDir, onProgress) {
   return new Promise((resolve, reject) => {
-    const url = getModelUrl(modelName);
-    if (!url) return reject(new Error(`Unknown model: ${modelName}`));
-
-    const modelPath = getModelPath(baseDir, modelName);
+    const url = getModelUrl();
+    const modelPath = getModelPath(baseDir);
+    const partialPath = modelPath + '.partial';
     const modelDir = path.dirname(modelPath);
 
     if (!fs.existsSync(modelDir)) {
       fs.mkdirSync(modelDir, { recursive: true });
     }
 
-    const file = fs.createWriteStream(modelPath);
+    const existingSize = getPartialSize(modelPath);
 
-    function followRedirects(requestUrl) {
+    function followRedirects(requestUrl, redirectCount = 0) {
+      if (redirectCount > 10) {
+        reject(new Error('Too many redirects'));
+        return;
+      }
+
       const client = requestUrl.startsWith('https') ? https : http;
-      client.get(requestUrl, (response) => {
+      const headers = existingSize > 0 ? { Range: `bytes=${existingSize}-` } : {};
+
+      const req = client.get(requestUrl, { headers }, (response) => {
+        // Handle redirects
         if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-          followRedirects(response.headers.location);
+          followRedirects(response.headers.location, redirectCount + 1);
           return;
         }
 
-        if (response.statusCode !== 200) {
-          fs.unlinkSync(modelPath);
+        // Handle resume (206) or fresh download (200)
+        if (response.statusCode !== 200 && response.statusCode !== 206) {
           reject(new Error(`Download failed: HTTP ${response.statusCode}`));
           return;
         }
 
-        const total = parseInt(response.headers['content-length'], 10) || 0;
-        let downloaded = 0;
+        const isResume = response.statusCode === 206;
+        const contentLength = parseInt(response.headers['content-length'], 10) || 0;
+        const total = isResume ? existingSize + contentLength : contentLength;
+
+        const file = fs.createWriteStream(partialPath, {
+          flags: isResume ? 'a' : 'w',
+        });
+
+        let downloaded = isResume ? existingSize : 0;
 
         response.on('data', (chunk) => {
           downloaded += chunk.length;
@@ -703,15 +733,18 @@ function downloadModel(baseDir, modelName, onProgress) {
 
         file.on('finish', () => {
           file.close();
+          // Rename partial to final
+          fs.renameSync(partialPath, modelPath);
           resolve(modelPath);
         });
 
         file.on('error', (err) => {
-          fs.unlinkSync(modelPath);
+          // Don't delete partial file — allows resume
           reject(err);
         });
-      }).on('error', (err) => {
-        fs.unlinkSync(modelPath);
+      });
+
+      req.on('error', (err) => {
         reject(err);
       });
     }
@@ -732,26 +765,20 @@ Expected: All 2 tests PASS
 
 ```bash
 git add src/main/model-downloader.js tests/model-downloader.test.js
-git commit -m "feat: add model downloader with progress reporting and redirect handling"
+git commit -m "feat: add model downloader with resume support"
 ```
 
 ---
 
 ### Task 6: Whisper Engine Module
 
-Wraps `@kutalia/whisper-node-addon`. Loads model once, exposes `transcribe(pcmBuffer)`.
+Wraps `@kutalia/whisper-node-addon`. Accepts Float32Array PCM directly.
 
 **Files:**
 - Create: `src/main/whisper-engine.js`
 - Create: `tests/whisper-engine.test.js`
 
-**Step 1: Install whisper-node-addon**
-
-Run: `npm install @kutalia/whisper-node-addon`
-
-Note: This may fail on Linux — that's expected. The prebuilt binaries are for Windows. On Linux, the module structure will install but won't load. Tests will mock the addon.
-
-**Step 2: Write failing tests (mocked)**
+**Step 1: Write failing tests (mocked)**
 
 Create `tests/whisper-engine.test.js`:
 
@@ -761,9 +788,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock the native addon
 vi.mock('@kutalia/whisper-node-addon', () => ({
   default: {
-    init: vi.fn(),
-    transcribe: vi.fn().mockResolvedValue([{ text: 'hello world' }]),
-    free: vi.fn(),
+    transcribe: vi.fn().mockResolvedValue({
+      transcription: [['0:00', '0:05', 'hello world']]
+    }),
   },
 }));
 
@@ -773,42 +800,65 @@ describe('WhisperEngine', () => {
   let engine;
 
   beforeEach(() => {
-    engine = new WhisperEngine();
+    vi.clearAllMocks();
+    engine = new WhisperEngine('/fake/path/model.bin');
   });
 
-  it('starts unloaded', () => {
-    expect(engine.isLoaded()).toBe(false);
+  it('stores model path', () => {
+    expect(engine.modelPath).toBe('/fake/path/model.bin');
   });
 
-  it('loads a model', async () => {
-    await engine.loadModel('/fake/path/model.bin');
-    expect(engine.isLoaded()).toBe(true);
-  });
-
-  it('transcribes audio and returns text', async () => {
-    await engine.loadModel('/fake/path/model.bin');
-    const text = await engine.transcribe('/fake/audio.wav');
+  it('transcribes Float32Array audio and returns text', async () => {
+    const pcm = new Float32Array([0.1, 0.2, 0.3]);
+    const text = await engine.transcribe(pcm);
     expect(text).toBe('hello world');
   });
 
-  it('throws if transcribe called before model loaded', async () => {
-    await expect(engine.transcribe('/fake/audio.wav')).rejects.toThrow('Model not loaded');
+  it('passes correct options to whisper addon', async () => {
+    const whisper = (await import('@kutalia/whisper-node-addon')).default;
+    const pcm = new Float32Array([0.1, 0.2, 0.3]);
+    await engine.transcribe(pcm);
+
+    expect(whisper.transcribe).toHaveBeenCalledWith({
+      pcmf32: pcm,
+      model: '/fake/path/model.bin',
+      language: 'en',
+      use_gpu: true,
+      no_timestamps: true,
+    });
   });
 
-  it('unloads model', async () => {
-    await engine.loadModel('/fake/path/model.bin');
-    engine.unload();
-    expect(engine.isLoaded()).toBe(false);
+  it('returns empty string for empty transcription', async () => {
+    const whisper = (await import('@kutalia/whisper-node-addon')).default;
+    whisper.transcribe.mockResolvedValueOnce({ transcription: [] });
+
+    const pcm = new Float32Array([0.1, 0.2, 0.3]);
+    const text = await engine.transcribe(pcm);
+    expect(text).toBe('');
+  });
+
+  it('joins multiple segments', async () => {
+    const whisper = (await import('@kutalia/whisper-node-addon')).default;
+    whisper.transcribe.mockResolvedValueOnce({
+      transcription: [
+        ['0:00', '0:02', 'hello'],
+        ['0:02', '0:05', 'world'],
+      ]
+    });
+
+    const pcm = new Float32Array([0.1, 0.2, 0.3]);
+    const text = await engine.transcribe(pcm);
+    expect(text).toBe('hello world');
   });
 });
 ```
 
-**Step 3: Run tests to verify they fail**
+**Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/whisper-engine.test.js`
 Expected: FAIL — `WhisperEngine` not found
 
-**Step 4: Write implementation**
+**Step 3: Write implementation**
 
 Create `src/main/whisper-engine.js`:
 
@@ -821,240 +871,242 @@ try {
 }
 
 class WhisperEngine {
-  constructor() {
-    this._loaded = false;
-    this._modelPath = null;
+  constructor(modelPath) {
+    this.modelPath = modelPath;
   }
 
-  isLoaded() {
-    return this._loaded;
-  }
-
-  async loadModel(modelPath) {
+  /**
+   * Transcribe audio from Float32Array PCM data.
+   * @param {Float32Array} pcmf32 - 16kHz mono audio
+   * @returns {Promise<string>} Transcribed text
+   */
+  async transcribe(pcmf32) {
     if (!whisper) throw new Error('whisper-node-addon not available on this platform');
-    whisper.init(modelPath);
-    this._modelPath = modelPath;
-    this._loaded = true;
-  }
-
-  async transcribe(audioPath) {
-    if (!this._loaded) throw new Error('Model not loaded');
 
     const result = await whisper.transcribe({
-      fname_inp: audioPath,
+      pcmf32,
+      model: this.modelPath,
       language: 'en',
       use_gpu: true,
+      no_timestamps: true,
     });
 
-    if (!result || result.length === 0) return '';
-    return result.map((seg) => seg.text).join(' ').trim();
-  }
-
-  unload() {
-    if (whisper && this._loaded) {
-      try { whisper.free(); } catch {}
+    if (!result || !result.transcription || result.transcription.length === 0) {
+      return '';
     }
-    this._loaded = false;
-    this._modelPath = null;
+
+    // Each segment is [startTime, endTime, text]
+    return result.transcription.map((seg) => seg[2]).join(' ').trim();
   }
 }
 
 module.exports = { WhisperEngine };
 ```
 
-**Step 5: Run tests to verify they pass**
+**Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/whisper-engine.test.js`
 Expected: All 5 tests PASS
 
-**Step 6: Commit**
+**Step 5: Commit**
 
 ```bash
-git add src/main/whisper-engine.js tests/whisper-engine.test.js package.json package-lock.json
-git commit -m "feat: add WhisperEngine wrapper with load/transcribe/unload"
+git add src/main/whisper-engine.js tests/whisper-engine.test.js
+git commit -m "feat: add WhisperEngine with Float32Array PCM support"
 ```
 
 ---
 
-### Task 7: Audio Capture Module
+### Task 7: Audio Capture Module (Web Audio API)
 
-Wraps microphone capture. Records 16kHz mono PCM to a temp WAV file.
+Captures microphone audio via Web Audio API in the renderer process, sends Float32Array to main process via IPC.
 
 **Files:**
-- Create: `src/main/audio-capture.js`
-- Create: `tests/audio-capture.test.js`
+- Create: `src/renderer/audio-capture.js`
+- Create: `src/renderer/audio-worklet-processor.js`
+- Modify: `src/preload.js`
 
-**Step 1: Install dependencies**
+**Step 1: Create AudioWorklet processor**
 
-Run: `npm install node-record-lpcm16`
-
-**Step 2: Write failing tests (mocked)**
-
-Create `tests/audio-capture.test.js`:
+Create `src/renderer/audio-worklet-processor.js`:
 
 ```js
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AudioCapture } from '../src/main/audio-capture.js';
+class PCMProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.bufferSize = 4096;
+    this.buffer = new Float32Array(this.bufferSize);
+    this.bufferIndex = 0;
+  }
 
-describe('AudioCapture', () => {
-  let capture;
+  process(inputs) {
+    const input = inputs[0];
+    if (!input || !input[0]) return true;
 
-  beforeEach(() => {
-    capture = new AudioCapture();
-  });
+    const channelData = input[0];
 
-  it('starts not recording', () => {
-    expect(capture.isRecording()).toBe(false);
-  });
+    for (let i = 0; i < channelData.length; i++) {
+      this.buffer[this.bufferIndex++] = channelData[i];
 
-  it('sets recording state on start', () => {
-    // start() will fail without a real mic, but state should update
-    try { capture.start(); } catch {}
-    // On Linux without SoX this throws — that's fine for now
-  });
+      if (this.bufferIndex >= this.bufferSize) {
+        // Send buffer to main thread
+        this.port.postMessage({
+          type: 'pcm',
+          data: this.buffer.slice(),
+        });
+        this.bufferIndex = 0;
+      }
+    }
 
-  it('has a temp file path after construction', () => {
-    expect(capture.getTempFilePath()).toMatch(/\.wav$/);
-  });
-});
-```
-
-**Step 3: Run tests to verify they fail**
-
-Run: `npx vitest run tests/audio-capture.test.js`
-Expected: FAIL — `AudioCapture` not found
-
-**Step 4: Write implementation**
-
-Create `src/main/audio-capture.js`:
-
-```js
-const path = require('path');
-const os = require('os');
-const fs = require('fs');
-
-let record;
-try {
-  record = require('node-record-lpcm16');
-} catch {
-  record = null;
+    return true;
+  }
 }
 
+registerProcessor('pcm-processor', PCMProcessor);
+```
+
+**Step 2: Create audio capture module for renderer**
+
+Create `src/renderer/audio-capture.js`:
+
+```js
 class AudioCapture {
   constructor() {
-    this._recording = null;
-    this._fileStream = null;
-    this._tempPath = path.join(os.tmpdir(), `openvoice-${Date.now()}.wav`);
+    this.audioContext = null;
+    this.mediaStream = null;
+    this.workletNode = null;
+    this.chunks = [];
+    this.isRecording = false;
   }
 
-  isRecording() {
-    return this._recording !== null;
-  }
+  async start() {
+    if (this.isRecording) return;
 
-  getTempFilePath() {
-    return this._tempPath;
-  }
-
-  start() {
-    if (!record) throw new Error('node-record-lpcm16 not available');
-    if (this._recording) return;
-
-    this._tempPath = path.join(os.tmpdir(), `openvoice-${Date.now()}.wav`);
-    this._fileStream = fs.createWriteStream(this._tempPath);
-
-    // Write a minimal WAV header (will be updated on stop)
-    this._writeWavHeader(this._fileStream, 0);
-
-    this._recording = record.record({
-      sampleRate: 16000,
-      channels: 1,
-      audioType: 'raw',
-      recorder: 'sox',
+    // Request microphone access
+    this.mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        sampleRate: 16000,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
     });
 
-    this._dataSize = 0;
-    this._recording.stream().on('data', (chunk) => {
-      this._fileStream.write(chunk);
-      this._dataSize += chunk.length;
-    });
+    // Create audio context at 16kHz
+    this.audioContext = new AudioContext({ sampleRate: 16000 });
+
+    // Load worklet
+    await this.audioContext.audioWorklet.addModule('audio-worklet-processor.js');
+
+    // Create source from microphone
+    const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+
+    // Create worklet node
+    this.workletNode = new AudioWorkletNode(this.audioContext, 'pcm-processor');
+
+    // Collect PCM chunks
+    this.chunks = [];
+    this.workletNode.port.onmessage = (event) => {
+      if (event.data.type === 'pcm') {
+        this.chunks.push(event.data.data);
+      }
+    };
+
+    // Connect: mic -> worklet
+    source.connect(this.workletNode);
+
+    this.isRecording = true;
   }
 
   stop() {
-    return new Promise((resolve) => {
-      if (!this._recording) {
-        resolve(this._tempPath);
-        return;
-      }
+    if (!this.isRecording) return new Float32Array(0);
 
-      this._recording.stop();
-      this._recording = null;
+    // Stop all tracks
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach((track) => track.stop());
+    }
 
-      this._fileStream.end(() => {
-        // Rewrite WAV header with correct data size
-        this._updateWavHeader(this._tempPath, this._dataSize);
-        resolve(this._tempPath);
-      });
-    });
+    // Disconnect worklet
+    if (this.workletNode) {
+      this.workletNode.disconnect();
+    }
+
+    // Close audio context
+    if (this.audioContext) {
+      this.audioContext.close();
+    }
+
+    this.isRecording = false;
+
+    // Concatenate all chunks into a single Float32Array
+    const totalLength = this.chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const result = new Float32Array(totalLength);
+    let offset = 0;
+    for (const chunk of this.chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    this.chunks = [];
+    return result;
   }
 
-  _writeWavHeader(stream, dataSize) {
-    const header = Buffer.alloc(44);
-    const sampleRate = 16000;
-    const numChannels = 1;
-    const bitsPerSample = 16;
-    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-    const blockAlign = numChannels * (bitsPerSample / 8);
-
-    header.write('RIFF', 0);
-    header.writeUInt32LE(36 + dataSize, 4);
-    header.write('WAVE', 8);
-    header.write('fmt ', 12);
-    header.writeUInt32LE(16, 16); // PCM chunk size
-    header.writeUInt16LE(1, 20); // PCM format
-    header.writeUInt16LE(numChannels, 22);
-    header.writeUInt32LE(sampleRate, 24);
-    header.writeUInt32LE(byteRate, 28);
-    header.writeUInt16LE(blockAlign, 32);
-    header.writeUInt16LE(bitsPerSample, 34);
-    header.write('data', 36);
-    header.writeUInt32LE(dataSize, 40);
-
-    stream.write(header);
-  }
-
-  _updateWavHeader(filePath, dataSize) {
-    const fd = fs.openSync(filePath, 'r+');
-    const header = Buffer.alloc(4);
-
-    // Update RIFF chunk size
-    header.writeUInt32LE(36 + dataSize, 0);
-    fs.writeSync(fd, header, 0, 4, 4);
-
-    // Update data chunk size
-    header.writeUInt32LE(dataSize, 0);
-    fs.writeSync(fd, header, 0, 4, 40);
-
-    fs.closeSync(fd);
-  }
-
-  cleanup() {
-    try { fs.unlinkSync(this._tempPath); } catch {}
+  getIsRecording() {
+    return this.isRecording;
   }
 }
 
-module.exports = { AudioCapture };
+// Export for use in renderer
+window.AudioCapture = AudioCapture;
 ```
 
-**Step 5: Run tests to verify they pass**
+**Step 3: Update preload to expose audio capture IPC**
 
-Run: `npx vitest run tests/audio-capture.test.js`
-Expected: All 3 tests PASS
+Update `src/preload.js`:
 
-**Step 6: Commit**
+```js
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('openvoice', {
+  getStatus: () => ipcRenderer.invoke('get-status'),
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
+  getDictionary: () => ipcRenderer.invoke('get-dictionary'),
+  setDictionary: (dict) => ipcRenderer.invoke('set-dictionary', dict),
+
+  // Audio capture
+  sendAudioData: (pcmFloat32Array) => {
+    // Convert Float32Array to regular array for IPC
+    ipcRenderer.send('audio-data', Array.from(pcmFloat32Array));
+  },
+
+  // Events
+  onStatusChange: (callback) => {
+    ipcRenderer.on('status-changed', (_event, status) => callback(status));
+  },
+  onTranscription: (callback) => {
+    ipcRenderer.on('transcription', (_event, text) => callback(text));
+  },
+  onTranscriptionError: (callback) => {
+    ipcRenderer.on('transcription-error', (_event, error) => callback(error));
+  },
+  onDownloadProgress: (callback) => {
+    ipcRenderer.on('download-progress', (_event, progress) => callback(progress));
+  },
+  onStartRecording: (callback) => {
+    ipcRenderer.on('start-recording', () => callback());
+  },
+  onStopRecording: (callback) => {
+    ipcRenderer.on('stop-recording', () => callback());
+  },
+});
+```
+
+**Step 4: Commit**
 
 ```bash
-git add src/main/audio-capture.js tests/audio-capture.test.js package.json package-lock.json
-git commit -m "feat: add AudioCapture with 16kHz WAV recording and header writing"
+git add src/renderer/audio-capture.js src/renderer/audio-worklet-processor.js src/preload.js
+git commit -m "feat: add Web Audio API capture with AudioWorklet"
 ```
 
 ---
@@ -1067,13 +1119,7 @@ Clipboard write + simulate Ctrl+V paste + restore clipboard.
 - Create: `src/main/text-output.js`
 - Create: `tests/text-output.test.js`
 
-**Step 1: Install robotjs**
-
-Run: `npm install @hurdlegroup/robotjs`
-
-Note: May fail on Linux without build tools. Tests will mock it.
-
-**Step 2: Write failing tests (mocked)**
+**Step 1: Write failing tests (mocked)**
 
 Create `tests/text-output.test.js`:
 
@@ -1120,12 +1166,12 @@ describe('pasteText', () => {
 });
 ```
 
-**Step 3: Run tests to verify they fail**
+**Step 2: Run tests to verify they fail**
 
 Run: `npx vitest run tests/text-output.test.js`
 Expected: FAIL — `pasteText` not found
 
-**Step 4: Write implementation**
+**Step 3: Write implementation**
 
 Create `src/main/text-output.js`:
 
@@ -1179,21 +1225,111 @@ function sleep(ms) {
 module.exports = { pasteText };
 ```
 
-**Step 5: Run tests to verify they pass**
+**Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/text-output.test.js`
 Expected: All 2 tests PASS
 
-**Step 6: Commit**
+**Step 5: Commit**
 
 ```bash
-git add src/main/text-output.js tests/text-output.test.js package.json package-lock.json
+git add src/main/text-output.js tests/text-output.test.js
 git commit -m "feat: add text output with clipboard paste and restore"
 ```
 
 ---
 
-### Task 9: System Tray
+### Task 9: Hotkey Manager (node-global-key-listener)
+
+Wraps `node-global-key-listener` to provide keydown/keyup events for global hotkeys.
+
+**Files:**
+- Create: `src/main/hotkey-manager.js`
+
+**Step 1: Create hotkey manager**
+
+Create `src/main/hotkey-manager.js`:
+
+```js
+let GlobalKeyboardListener;
+try {
+  GlobalKeyboardListener = require('node-global-key-listener').GlobalKeyboardListener;
+} catch {
+  GlobalKeyboardListener = null;
+}
+
+class HotkeyManager {
+  constructor() {
+    this.listener = null;
+    this.callbacks = { down: null, up: null };
+    this.primaryKey = 'SPACE';
+    this.modifiers = ['LEFT CTRL', 'LEFT SHIFT'];
+  }
+
+  /**
+   * Configure the hotkey
+   * @param {string} primaryKey - Main key (e.g., 'SPACE', 'F1')
+   * @param {string[]} modifiers - Modifier keys (e.g., ['LEFT CTRL', 'LEFT SHIFT'])
+   */
+  setHotkey(primaryKey, modifiers) {
+    this.primaryKey = primaryKey;
+    this.modifiers = modifiers;
+  }
+
+  /**
+   * Start listening for hotkey events
+   * @param {object} callbacks - { down: () => void, up: () => void }
+   */
+  start(callbacks) {
+    if (!GlobalKeyboardListener) {
+      console.error('node-global-key-listener not available');
+      return;
+    }
+
+    this.callbacks = callbacks;
+    this.listener = new GlobalKeyboardListener();
+
+    this.listener.addListener((event, down) => {
+      // Check if primary key matches
+      if (event.name !== this.primaryKey) return;
+
+      // Check if all modifiers are held
+      const modifiersHeld = this.modifiers.every((mod) => down[mod]);
+      if (!modifiersHeld) return;
+
+      // Dispatch event
+      if (event.state === 'DOWN' && this.callbacks.down) {
+        this.callbacks.down();
+      } else if (event.state === 'UP' && this.callbacks.up) {
+        this.callbacks.up();
+      }
+    });
+  }
+
+  /**
+   * Stop listening
+   */
+  stop() {
+    if (this.listener) {
+      this.listener.kill();
+      this.listener = null;
+    }
+  }
+}
+
+module.exports = { HotkeyManager };
+```
+
+**Step 2: Commit**
+
+```bash
+git add src/main/hotkey-manager.js
+git commit -m "feat: add HotkeyManager with node-global-key-listener"
+```
+
+---
+
+### Task 10: System Tray
 
 **Files:**
 - Create: `src/main/tray.js`
@@ -1270,38 +1406,38 @@ git commit -m "feat: add system tray with context menu"
 
 ---
 
-### Task 10: Main Process Orchestration
+### Task 11: Main Process Orchestration
 
 Wire all modules together in the main process.
 
 **Files:**
 - Modify: `src/main/index.js`
-- Modify: `src/preload.js`
 
 **Step 1: Rewrite main process to wire everything together**
 
 Replace `src/main/index.js`:
 
 ```js
-const { app, BrowserWindow, globalShortcut, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { HotkeyStateMachine } = require('./hotkey-state-machine');
+const { HotkeyManager } = require('./hotkey-manager');
 const { WhisperEngine } = require('./whisper-engine');
-const { AudioCapture } = require('./audio-capture');
 const { applyDictionary } = require('./dictionary');
 const { pasteText } = require('./text-output');
 const { createTray, updateTrayTooltip, destroyTray } = require('./tray');
-const { getSetting, setSetting, getAllSettings, DEFAULTS } = require('./settings');
+const { getSetting, setSetting, getAllSettings } = require('./settings');
 const { modelExists, downloadModel, getModelPath } = require('./model-downloader');
 
 let mainWindow;
 let whisperEngine;
-let audioCapture;
 let hotkeyStateMachine;
+let hotkeyManager;
 let currentStatus = 'idle';
+let pendingAudioData = [];
 
 function getAppDataPath() {
-  return path.join(app.getPath('userData'));
+  return app.getPath('userData');
 }
 
 function setStatus(status) {
@@ -1312,20 +1448,42 @@ function setStatus(status) {
   updateTrayTooltip(`OpenVoice — ${status}`);
 }
 
-async function handleRecordStart() {
+function handleRecordStart() {
   setStatus('recording');
-  audioCapture = new AudioCapture();
-  audioCapture.start();
+  pendingAudioData = [];
+  // Tell renderer to start recording
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('start-recording');
+  }
 }
 
 async function handleRecordStop() {
-  if (!audioCapture) return;
-
   setStatus('transcribing');
 
+  // Tell renderer to stop recording
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('stop-recording');
+  }
+
+  // Wait a moment for final audio data to arrive
+  await new Promise((r) => setTimeout(r, 100));
+
   try {
-    const wavPath = await audioCapture.stop();
-    const rawText = await whisperEngine.transcribe(wavPath);
+    // Combine all audio chunks
+    const totalLength = pendingAudioData.reduce((sum, chunk) => sum + chunk.length, 0);
+    const pcmf32 = new Float32Array(totalLength);
+    let offset = 0;
+    for (const chunk of pendingAudioData) {
+      pcmf32.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    if (pcmf32.length === 0) {
+      setStatus('idle');
+      return;
+    }
+
+    const rawText = await whisperEngine.transcribe(pcmf32);
     const dictionary = getSetting('dictionary');
     const finalText = applyDictionary(rawText, dictionary);
 
@@ -1346,37 +1504,28 @@ async function handleRecordStop() {
       mainWindow.webContents.send('transcription-error', err.message);
     }
   } finally {
-    audioCapture.cleanup();
-    audioCapture = null;
+    pendingAudioData = [];
     setStatus('idle');
   }
 }
 
-function registerHotkey() {
-  const hotkey = getSetting('hotkey');
-
+function setupHotkey() {
   hotkeyStateMachine = new HotkeyStateMachine({
     doubleClickThreshold: getSetting('doubleClickThreshold'),
     onRecordStart: handleRecordStart,
     onRecordStop: handleRecordStop,
   });
 
-  const registered = globalShortcut.register(hotkey, () => {
-    // globalShortcut fires on keydown only — we use it as a trigger
-    // For PTT (hold detection), we track timing in the state machine
-    hotkeyStateMachine.keyDown();
+  hotkeyManager = new HotkeyManager();
+  hotkeyManager.setHotkey(
+    getSetting('hotkeyPrimary'),
+    getSetting('hotkeyModifiers')
+  );
 
-    // Set a short timeout to detect keyup (globalShortcut doesn't provide keyup)
-    // For a proper implementation on Windows, use node-global-key-listener
-    // This is a simplified version — Task 11 will improve this
-    setTimeout(() => {
-      hotkeyStateMachine.keyUp();
-    }, 200);
+  hotkeyManager.start({
+    down: () => hotkeyStateMachine.keyDown(),
+    up: () => hotkeyStateMachine.keyUp(),
   });
-
-  if (!registered) {
-    console.error(`Failed to register hotkey: ${hotkey}`);
-  }
 }
 
 function createWindow() {
@@ -1408,17 +1557,15 @@ function createWindow() {
 }
 
 async function initWhisper() {
-  whisperEngine = new WhisperEngine();
-  const modelName = getSetting('modelName');
-  const modelPath = getModelPath(getAppDataPath(), modelName);
+  const modelPath = getModelPath(getAppDataPath());
 
-  if (!modelExists(getAppDataPath(), modelName)) {
+  if (!modelExists(getAppDataPath())) {
     setStatus('downloading model');
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
     }
 
-    await downloadModel(getAppDataPath(), modelName, (progress) => {
+    await downloadModel(getAppDataPath(), (progress) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('download-progress', progress);
       }
@@ -1428,7 +1575,7 @@ async function initWhisper() {
   }
 
   setStatus('loading model');
-  await whisperEngine.loadModel(modelPath);
+  whisperEngine = new WhisperEngine(modelPath);
   setStatus('idle');
 }
 
@@ -1437,13 +1584,20 @@ ipcMain.handle('get-status', () => currentStatus);
 ipcMain.handle('get-settings', () => getAllSettings());
 ipcMain.handle('set-setting', (_event, key, value) => {
   setSetting(key, value);
-  if (key === 'hotkey') {
-    globalShortcut.unregisterAll();
-    registerHotkey();
+  // If hotkey changed, re-setup
+  if (key === 'hotkeyPrimary' || key === 'hotkeyModifiers') {
+    if (hotkeyManager) hotkeyManager.stop();
+    if (hotkeyStateMachine) hotkeyStateMachine.destroy();
+    setupHotkey();
   }
 });
 ipcMain.handle('get-dictionary', () => getSetting('dictionary'));
 ipcMain.handle('set-dictionary', (_event, dict) => setSetting('dictionary', dict));
+
+// Receive audio data from renderer
+ipcMain.on('audio-data', (_event, audioArray) => {
+  pendingAudioData.push(new Float32Array(audioArray));
+});
 
 // App lifecycle
 app.whenReady().then(async () => {
@@ -1461,7 +1615,7 @@ app.whenReady().then(async () => {
 
   try {
     await initWhisper();
-    registerHotkey();
+    setupHotkey();
     setSetting('firstLaunchDone', true);
   } catch (err) {
     console.error('Initialization failed:', err);
@@ -1469,8 +1623,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
-  if (whisperEngine) whisperEngine.unload();
+  if (hotkeyManager) hotkeyManager.stop();
   if (hotkeyStateMachine) hotkeyStateMachine.destroy();
   destroyTray();
 });
@@ -1480,45 +1633,16 @@ app.on('window-all-closed', () => {
 });
 ```
 
-**Step 2: Update preload script with full IPC bridge**
-
-Replace `src/preload.js`:
-
-```js
-const { contextBridge, ipcRenderer } = require('electron');
-
-contextBridge.exposeInMainWorld('openvoice', {
-  getStatus: () => ipcRenderer.invoke('get-status'),
-  getSettings: () => ipcRenderer.invoke('get-settings'),
-  setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
-  getDictionary: () => ipcRenderer.invoke('get-dictionary'),
-  setDictionary: (dict) => ipcRenderer.invoke('set-dictionary', dict),
-
-  onStatusChange: (callback) => {
-    ipcRenderer.on('status-changed', (_event, status) => callback(status));
-  },
-  onTranscription: (callback) => {
-    ipcRenderer.on('transcription', (_event, text) => callback(text));
-  },
-  onTranscriptionError: (callback) => {
-    ipcRenderer.on('transcription-error', (_event, error) => callback(error));
-  },
-  onDownloadProgress: (callback) => {
-    ipcRenderer.on('download-progress', (_event, progress) => callback(progress));
-  },
-});
-```
-
-**Step 3: Commit**
+**Step 2: Commit**
 
 ```bash
-git add src/main/index.js src/preload.js
+git add src/main/index.js
 git commit -m "feat: wire all modules in main process orchestration"
 ```
 
 ---
 
-### Task 11: Renderer UI
+### Task 12: Renderer UI
 
 Minimal but functional UI: status, last transcription, dictionary editor, settings.
 
@@ -1592,6 +1716,7 @@ Replace `src/renderer/index.html`:
       </label>
     </section>
   </div>
+  <script src="audio-capture.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>
@@ -1769,6 +1894,9 @@ const dictKeyInput = document.getElementById('dict-key');
 const dictValueInput = document.getElementById('dict-value');
 const dictAddBtn = document.getElementById('dict-add-btn');
 
+// Audio capture instance
+let audioCapture = new AudioCapture();
+
 // Tabs
 document.querySelectorAll('.tab').forEach((tab) => {
   tab.addEventListener('click', () => {
@@ -1790,6 +1918,16 @@ window.openvoice.onStatusChange((status) => {
   else statusBadge.classList.add('status-idle');
 
   downloadSection.classList.toggle('hidden', !status.includes('download'));
+});
+
+// Recording control from main process
+window.openvoice.onStartRecording(async () => {
+  await audioCapture.start();
+});
+
+window.openvoice.onStopRecording(() => {
+  const pcmData = audioCapture.stop();
+  window.openvoice.sendAudioData(pcmData);
 });
 
 // Transcription display
@@ -1881,7 +2019,7 @@ git commit -m "feat: add renderer UI with status, transcription, dictionary, and
 
 ---
 
-### Task 12: Vitest Config
+### Task 13: Vitest Config
 
 **Files:**
 - Create: `vitest.config.js`
@@ -1905,7 +2043,7 @@ export default defineConfig({
 **Step 2: Run all tests**
 
 Run: `npx vitest run`
-Expected: All tests pass (dictionary: 9, state machine: 6, settings: 7, whisper-engine: 5, audio-capture: 3, text-output: 2 = 32 total)
+Expected: All tests pass (dictionary: 9, state machine: 6, settings: 8, whisper-engine: 5, text-output: 2 = 30 total)
 
 **Step 3: Commit**
 
@@ -1916,7 +2054,7 @@ git commit -m "chore: add vitest config"
 
 ---
 
-### Task 13: Integration Smoke Test on Windows
+### Task 14: Integration Smoke Test on Windows
 
 This task must be done on a Windows machine.
 
@@ -1926,7 +2064,7 @@ This task must be done on a Windows machine.
 
 Run: `npm install`
 
-If `@kutalia/whisper-node-addon` fails, install Visual Studio Build Tools:
+If `@kutalia/whisper-node-addon` or `@hurdlegroup/robotjs` fails, install Visual Studio Build Tools:
 ```powershell
 choco install visualstudio2022-workload-vctools -y
 npx @electron/rebuild
@@ -1943,7 +2081,7 @@ Run: `npm start`
 Expected:
 - Window appears with "OpenVoice" header
 - Status badge shows "downloading model" (if first run)
-- Model downloads with progress bar
+- Model downloads with progress bar (supports resume if interrupted)
 - After download, status shows "loading model" then "idle"
 - Tray icon appears in system tray
 
@@ -1975,7 +2113,7 @@ git commit -m "fix: integration test fixes from Windows smoke test"
 
 ---
 
-### Task 14: Build Windows Installer
+### Task 15: Build Windows Installer
 
 **Step 1: Build the NSIS installer**
 
@@ -1989,32 +2127,17 @@ Expected: Creates `dist/OpenVoice Setup 0.1.0.exe`
 - Launch from Start Menu
 - Verify tray icon, hotkey, recording, and transcription all work
 
-**Step 3: Commit build config tweaks if needed**
-
-```bash
-git add -A
-git commit -m "chore: finalize electron-builder config for Windows NSIS"
-```
-
 ---
 
-## Summary
+## Summary of Fixes Applied
 
-| Task | Description | Testable on Linux? |
-|---|---|---|
-| 1 | Project scaffold | Yes (structure only) |
-| 2 | Dictionary engine (TDD) | Yes |
-| 3 | Hotkey state machine (TDD) | Yes |
-| 4 | Settings module | Yes |
-| 5 | Model downloader | Yes (unit tests) |
-| 6 | Whisper engine (mocked) | Yes (mocked) |
-| 7 | Audio capture | Partial |
-| 8 | Text output (mocked) | Yes (mocked) |
-| 9 | System tray | No (Electron required) |
-| 10 | Main process orchestration | No (Electron required) |
-| 11 | Renderer UI | No (Electron required) |
-| 12 | Vitest config | Yes |
-| 13 | Windows smoke test | No (Windows only) |
-| 14 | Build installer | No (Windows only) |
-
-Tasks 1-8 and 12 can be built and tested on Linux. Tasks 9-11 are code-only (no tests, verified in Task 13). Tasks 13-14 require Windows.
+| Original Issue | Fix Applied |
+|----------------|-------------|
+| Wrong Whisper API (`init`/`free`/`fname_inp`) | Use `transcribe({ pcmf32, model })` with Float32Array |
+| Wrong model filename (`ggml-distil-large-v3.5.bin`) | Use `ggml-model.bin` |
+| Wrong model URL | Use `https://huggingface.co/distil-whisper/distil-large-v3.5-ggml/resolve/main/ggml-model.bin` |
+| No keyup detection (setTimeout hack) | Use `node-global-key-listener` for real keydown/keyup |
+| SoX dependency via `node-record-lpcm16` | Use Web Audio API + AudioWorklet (zero external deps) |
+| WAV file creation in audio pipeline | Stream Float32Array directly to Whisper |
+| No resume support for model download | Added Range header support for resume |
+| Missing `node-global-key-listener` in deps | Added to package.json |
