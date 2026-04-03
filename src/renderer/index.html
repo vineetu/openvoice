@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>OpenVoice</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>OpenVoice</h1>
+      <div id="status-badge" class="status-idle">Idle</div>
+    </header>
+
+    <!-- Permission Warning (macOS) -->
+    <section id="permission-section" class="hidden warning-box">
+      <h2>Accessibility Permission Required</h2>
+      <p>OpenVoice needs Accessibility permission to detect global hotkeys and paste text.</p>
+      <ol>
+        <li>Open <strong>System Preferences</strong> (or System Settings)</li>
+        <li>Go to <strong>Security & Privacy</strong> > <strong>Privacy</strong> > <strong>Accessibility</strong></li>
+        <li>Click the lock to make changes</li>
+        <li>Add and enable <strong>OpenVoice</strong></li>
+        <li>Restart OpenVoice</li>
+      </ol>
+    </section>
+
+    <!-- Download Progress (shown during model download) -->
+    <section id="download-section" class="hidden">
+      <p>Downloading speech model...</p>
+      <div class="progress-bar">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+      <span id="progress-text">0%</span>
+    </section>
+
+    <!-- Last Transcription -->
+    <section id="transcription-section">
+      <h2>Last Transcription</h2>
+      <div id="transcription-text" class="text-box">Press your hotkey to start dictating</div>
+    </section>
+
+    <!-- Tabs -->
+    <nav class="tabs">
+      <button class="tab active" data-tab="dictionary">Dictionary</button>
+      <button class="tab" data-tab="settings">Settings</button>
+    </nav>
+
+    <!-- Dictionary Tab -->
+    <section id="dictionary-tab" class="tab-content active">
+      <div id="dict-entries"></div>
+      <div class="dict-add">
+        <input id="dict-key" type="text" placeholder="Word heard">
+        <input id="dict-value" type="text" placeholder="Replace with">
+        <button id="dict-add-btn">Add</button>
+      </div>
+    </section>
+
+    <!-- Settings Tab -->
+    <section id="settings-tab" class="tab-content">
+      <label>
+        Hotkey
+        <input id="setting-hotkey" type="text" readonly>
+      </label>
+      <label>
+        <input id="setting-autopaste" type="checkbox"> Auto-paste into active window
+      </label>
+      <label>
+        <input id="setting-startup" type="checkbox"> Start at login
+      </label>
+    </section>
+  </div>
+  <script src="audio-capture.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Allow loading unsigned dynamic libraries (for native addons) -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- Allow JIT compilation (for WASM) -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- Microphone access -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+
+    <!-- Allow accessibility features for global hotkeys and simulated keystrokes -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+</dict>
+</plist>

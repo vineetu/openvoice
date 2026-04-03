@@ -1,0 +1,176 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  background: #0f0f1a;
+  color: #e0e0e0;
+  padding: 20px;
+  user-select: none;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  /* Allow dragging window from header on macOS */
+  -webkit-app-region: drag;
+}
+
+header button, header input {
+  -webkit-app-region: no-drag;
+}
+
+h1 { font-size: 22px; font-weight: 600; }
+h2 { font-size: 14px; font-weight: 500; margin-bottom: 8px; color: #888; }
+
+#status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  -webkit-app-region: no-drag;
+}
+
+.status-idle { background: #1a2a1a; color: #4ade80; }
+.status-recording { background: #2a1a1a; color: #f87171; animation: pulse 1s infinite; }
+.status-transcribing { background: #1a1a2a; color: #60a5fa; }
+.status-downloading { background: #2a2a1a; color: #fbbf24; }
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+.text-box {
+  background: #1a1a2e;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 60px;
+  margin-bottom: 16px;
+}
+
+.warning-box {
+  background: #2a2a1a;
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.warning-box h2 {
+  color: #fbbf24;
+  margin-bottom: 12px;
+}
+
+.warning-box ol {
+  margin-left: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.tab {
+  background: #1a1a2e;
+  border: none;
+  color: #888;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tab.active { background: #2a2a4e; color: #e0e0e0; }
+.tab:hover { background: #2a2a4e; }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Dictionary */
+#dict-entries {
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.dict-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.dict-row .key { color: #60a5fa; min-width: 80px; }
+.dict-row .arrow { color: #555; }
+.dict-row .value { flex: 1; }
+.dict-row button {
+  background: none;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.dict-add {
+  display: flex;
+  gap: 6px;
+}
+
+.dict-add input {
+  flex: 1;
+  background: #1a1a2e;
+  border: 1px solid #333;
+  color: #e0e0e0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.dict-add button, #setting-hotkey {
+  background: #2a2a4e;
+  border: 1px solid #444;
+  color: #e0e0e0;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+/* Settings */
+#settings-tab label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+#settings-tab input[type="text"] {
+  display: block;
+  margin-top: 4px;
+  width: 100%;
+}
+
+#settings-tab input[type="checkbox"] { margin-right: 8px; }
+
+/* Progress bar */
+.progress-bar {
+  background: #1a1a2e;
+  border-radius: 6px;
+  height: 8px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+
+.progress-fill {
+  background: #60a5fa;
+  height: 100%;
+  width: 0%;
+  transition: width 0.3s;
+}
+
+.hidden { display: none !important; }

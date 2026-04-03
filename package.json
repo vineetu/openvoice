@@ -1,0 +1,69 @@
+{
+  "name": "openvoice",
+  "version": "0.1.0",
+  "description": "Voice dictation using local Whisper - cross-platform",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@nicepkg/gpt-runner-shared": "^1.0.0",
+    "@nicepkg/whisper.cpp.wasm": "^1.0.0",
+    "@hurdlegroup/robotjs": "^0.6.0",
+    "node-global-key-listener": "^0.3.0",
+    "electron-store": "^10.0.0"
+  },
+  "build": {
+    "appId": "com.openvoice.app",
+    "productName": "OpenVoice",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "models/",
+        "to": "models/",
+        "filter": ["**/*.bin"]
+      }
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "OpenVoice needs microphone access for voice dictation",
+        "NSAppleEventsUsageDescription": "OpenVoice needs accessibility access to paste text into other applications"
+      }
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
