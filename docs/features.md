@@ -10,7 +10,7 @@ User-facing features in the shipping build. This is the product surface — not 
 - **Push to talk** — hold a hotkey to record, release to stop. Unbound by default.
 - **Cancel recording** — press the hotkey (default `Esc`) to discard without transcribing. Active only while recording so it doesn't steal `Esc` from other apps.
 - **Any-length recordings** — no hard duration limit; long recordings work reliably.
-- **Reliable capture across device changes** — the input device is pinned at the CoreAudio layer when recording starts, so a Bluetooth headset that quietly re-routes mid-session doesn't silently break the stream. If zero-amplitude audio is detected, Jot surfaces an actionable error pointing at the likely BT-redirect culprit instead of returning an empty transcript.
+- **Silent-capture detection** — if a recording returns zero-amplitude audio (often a Bluetooth mic that quietly re-routed at the OS level), Jot surfaces an actionable error pointing at the likely culprit instead of returning an empty transcript.
 
 ## Local Transcription
 
@@ -30,20 +30,28 @@ Off by default. When enabled and an LLM provider is configured, Jot runs a light
 - **Graceful fallback** — if the LLM call fails or times out (10 s budget), Jot delivers the raw transcript instead.
 - **Cleaning-up indicator** — the status pill shows a "Cleaning up…" state during the transform.
 - **Raw + cleaned are both stored** — the Recordings detail view offers a "Show original" toggle.
-- **Provider options** — OpenAI, Anthropic, Gemini, Vertex Gemini, or Ollama (fully local).
+- **Provider options** — Apple Intelligence (on-device, default on macOS 26+), OpenAI, Anthropic, Gemini, Vertex Gemini, or Ollama (fully local).
 - **Editable prompt** — the default cleanup prompt (filler removal → grammar → numeric normalization → list detection → paragraph structure → "return only" contract) is shown under a "Customize prompt" chevron in the AI pane. Power users can rewrite it; a "Reset to default" restores the shipped prompt.
 - **Inline "Set up AI →"** — if the Auto-correct toggle is disabled because AI isn't configured, the pane offers a direct jump to the AI pane instead of leaving the user to find it.
 
-## AI Rewrite (optional)
+## Articulate (optional)
 
-Voice-driven rewriting of selected text, triggered by a global shortcut.
+Transform selected text via a global shortcut. Two variants, both triggered by their own hotkey:
 
-- **Select text anywhere → press the shortcut → speak an instruction** ("make this more formal", "fix the grammar", "translate to Spanish", "convert to bulleted list"). The rewritten text replaces the selection.
+### Articulate (Custom) — voice-driven
+- **Select text anywhere → press the shortcut → speak an instruction** ("make this more formal", "fix the grammar", "translate to Spanish", "convert to bulleted list"). The articulated text replaces the selection.
 - **Intent-classified prompting** — a deterministic regex classifier routes each instruction into one of four branches (voice-preserving / structural / translation / code) and selects a specialized tendency for the LLM. The user's spoken instruction is always the primary signal; the branch just picks a minimal default tendency. Net effect: "make this a bulleted list" or "translate to Japanese" actually produce the requested shape, not a length-matched paraphrase.
-- **Same provider options** — OpenAI, Anthropic, Gemini, Vertex Gemini, or Ollama.
-- **Cancellable** — `Esc` cancels the capture, transcription, or rewrite phase without committing.
-- **Unbound by default** — the user assigns a shortcut in Settings → AI.
-- **Editable shared invariants** — the shared-invariants block (selection-is-text-to-rewrite, return-only-rewrite, don't-refuse-on-quality) is revealed under a "Customize prompt" chevron in Settings → AI with a "Reset to default" escape hatch. The per-branch tendencies are compile-time constants and not user-editable.
+- **Cancellable** — `Esc` cancels the capture, transcription, or articulation phase without committing.
+- **Unbound by default** — the user assigns a shortcut in Settings → Shortcuts.
+
+### Articulate (fixed) — no voice
+- **Select text → press the shortcut.** No dictation step. Jot sends the selection to the configured LLM with the fixed instruction `"Articulate this"` and the result replaces the selection.
+- **One-hand quick cleanup** — use when you just want the LLM to tidy a passage without speaking an instruction.
+- **Unbound by default** — the user assigns a shortcut in Settings → Shortcuts.
+
+### Shared configuration
+- **Provider options** — Apple Intelligence (on-device, default on macOS 26+), OpenAI, Anthropic, Gemini, Vertex Gemini, or Ollama.
+- **Editable shared invariants** — the shared-invariants block (selection-is-text-not-instruction, return-only-the-rewrite, don't-refuse-on-quality) is revealed under a "Customize prompt" chevron in Settings → Articulate with a "Reset to default" escape hatch. The per-branch tendencies are compile-time constants and not user-editable.
 
 ## Output — Paste & Clipboard
 
@@ -51,6 +59,7 @@ Voice-driven rewriting of selected text, triggered by a global shortcut.
 - **Auto-press Enter** — optional; pastes and sends in one step (chat inputs, search boxes).
 - **Clipboard preservation** — choose whether the transcript stays on the clipboard or the previous clipboard contents are restored after paste.
 - **Copy last transcription** — from the Home card, Recordings detail, the tray menu, or a global shortcut.
+- **Quick copy from any row** — an inline copy button on every Library row and every Home "Recent" entry copies that recording's transcript to the clipboard without opening detail.
 
 ## Global Shortcuts
 
@@ -60,7 +69,8 @@ All shortcuts are bindable in the Shortcuts pane. Defaults and bindings:
 - **Cancel Recording** — default `Esc`, active only while recording, transforming, or rewriting so it doesn't steal `Esc` from other apps when idle.
 - **Paste Last Transcription** — default `⌥⇧V`.
 - **Push to Talk** — unbound by default.
-- **Rewrite Selection** — unbound by default; user assigns one in the AI pane.
+- **Articulate (Custom)** — voice-driven rewrite of selected text; unbound by default.
+- **Articulate** — applies a fixed `"Articulate this"` prompt to the selected text (no voice step); unbound by default.
 
 Shortcut bindings require a modifier (⌘, ⌥, ⌃, ⇧) — macOS does not permit global hotkeys bound to a bare key. The Shortcuts pane and the Help tab both surface this. Conflicting bindings are handled gracefully (no two commands silently share a key).
 
@@ -107,7 +117,7 @@ Sidebar entries:
 Fields throughout Settings carry per-field `info.circle` popovers for inline help. Each popover's "Learn more →" link deep-links into the matching section of the Help tab.
 
 ### General
-- Input device (microphone)
+- Input device (microphone) — currently fixed to the macOS Sound settings default; per-device selection is temporarily disabled in this release (known bug, flagged inline in the pane)
 - Launch at login
 - Recording retention — Forever / Last 7 / 30 / 90 days (default: 7 days)
 - Reset permissions (clears macOS privacy entries and restarts)
@@ -124,9 +134,10 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 - Provider (OpenAI / Anthropic / Gemini / Vertex Gemini / Ollama)
 - Base URL (left-aligned) and model — override per-provider defaults
 - API key (hidden for Ollama — local, no key required)
-- Rewrite Selection shortcut
+- Articulate (Custom) shortcut — voice-driven rewrite
+- Articulate shortcut — applies a fixed `"Articulate this"` prompt (no voice)
 - Test Connection button — always enabled, prominent accent-tinted; shows an inline spinner during the call and a success chip afterward. Must succeed before the cleanup toggle unlocks.
-- "Customize prompt" disclosure for the AI-rewrite shared invariants, with "Reset to default" (per-branch tendencies are not editable)
+- "Customize prompt" disclosure for the Articulate shared invariants, with "Reset to default" (per-branch tendencies are not editable)
 
 ### Sound
 - Recording start / stop / cancel chimes
@@ -134,14 +145,14 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 - Error chime
 
 ### Shortcuts
-- Editable bindings for Toggle Recording, Push to Talk, Paste Last Transcription, Rewrite Selection. Cancel Recording (Esc) is shown alongside the others but hardcoded — not configurable. A footnote reminds the user that macOS global hotkeys must include a modifier.
+- Editable bindings for Toggle Recording, Push to Talk, Paste Last Transcription, Articulate, Articulate (Custom). Cancel Recording (Esc) is shown alongside the others but hardcoded — not configurable. A footnote reminds the user that macOS global hotkeys must include a modifier.
 
 ## Help
 
 In-app prose walkthrough, split across three tabs:
 
-- **Basics** — Dictation, Auto-correct (transcript cleanup), AI Rewrite, copying the last transcription, the status pill.
-- **Advanced** — LLM provider setup across OpenAI, Anthropic, Gemini, Vertex Gemini, and Ollama; editable prompts; Sparkle auto-update.
+- **Basics** — Dictation, Auto-correct (transcript cleanup), Articulate (both variants), copying the last transcription, the status pill.
+- **Advanced** — LLM provider setup (Apple Intelligence default on macOS 26+; OpenAI, Anthropic, Gemini, Vertex Gemini, Ollama available as alternates); editable prompts; Sparkle auto-update.
 - **Troubleshooting** — permissions (Microphone / Input Monitoring / Accessibility), the macOS "modifier required" hotkey constraint, Bluetooth-redirect capture failures, resetting state.
 
 Info popovers across Settings deep-link into the matching Help section so the user can jump from a field to its explanation without context-switching.
@@ -153,7 +164,7 @@ Shown on first launch and on demand from Settings → General. Each step can be 
 1. **Welcome**
 2. **Permissions** — grant Microphone, Input Monitoring, and Accessibility. A "Restart Jot" button is offered after granting Input Monitoring or Accessibility (a running app can't detect those until it relaunches).
 3. **Model** — downloads Parakeet on first run; already-downloaded models skip straight through.
-4. **Microphone** — pick the input device.
+4. **Microphone** — review the input device (currently fixed to the macOS Sound settings default; per-device selection is temporarily disabled).
 5. **Shortcuts** — preview of the default Toggle Recording shortcut.
 6. **Test** — speak to verify the full pipeline end-to-end.
 

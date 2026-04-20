@@ -18,10 +18,29 @@ final class SetupWizardCoordinator: ObservableObject {
     @Published private(set) var currentStep: WizardStepID = .welcome
     @Published var chrome: WizardStepChrome = .empty
 
+    /// Transcript from a successful Test step, persisted here so the Cleanup
+    /// and Articulate intro steps can run a live demo against the user's real
+    /// dictation. Nil when Test hasn't succeeded (skipped, failed, or user
+    /// navigated past it without recording).
+    @Published var testTranscript: String?
+
+    /// The long-lived `Transcriber` owned by `RecorderController`, injected at
+    /// construction. Steps (notably `TestStep`) reuse this instance so that
+    /// the ANE warm-up performed during the wizard leaves the recorder ready
+    /// to transcribe the first post-wizard hotkey press — without this, the
+    /// wizard and the recorder each load their own `AsrManager`, and the
+    /// recorder's remains unloaded until relaunch.
+    let transcriber: Transcriber
+
     private let onFinish: () -> Void
 
-    init(startingAt step: WizardStepID = .welcome, onFinish: @escaping () -> Void) {
+    init(
+        startingAt step: WizardStepID = .welcome,
+        transcriber: Transcriber,
+        onFinish: @escaping () -> Void
+    ) {
         self.currentStep = step
+        self.transcriber = transcriber
         self.onFinish = onFinish
     }
 

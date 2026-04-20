@@ -46,6 +46,10 @@ Swift · SwiftUI + AppKit · FluidAudio (Parakeet TDT 0.6B v3 on Apple Neural En
 - `docs/design-requirements.md` — product requirements
 - `docs/features.md` — feature inventory
 
+## Support
+
+If Jot saves you time, you can [buy me a coffee ☕](https://ko-fi.com/vineetsriram).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

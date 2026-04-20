@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // process terminates before any side effects land.
     let recorder: RecorderController = RecorderController()
     let delivery: DeliveryService = DeliveryService.shared
-    private(set) var rewriteController: RewriteController!
+    private(set) var articulateController: ArticulateController!
     /// SwiftData stack. Shared with the SwiftUI scene via
     /// `.modelContainer(modelContainer)` so both the UI and the
     /// `RecordingPersister` write into the same store.
@@ -85,13 +85,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `delivery` are already eagerly instantiated as stored properties.
         delivery.bind(recorder: recorder)
 
-        let rewrite = RewriteController(
+        let articulate = ArticulateController(
             capture: AudioCapture(),
             transcriber: Transcriber()
         )
-        self.rewriteController = rewrite
+        self.articulateController = articulate
 
-        let router = HotkeyRouter(recorder: recorder, delivery: delivery, rewriteController: rewrite)
+        let router = HotkeyRouter(recorder: recorder, delivery: delivery, articulateController: articulate)
         router.activate()
 
         // Deliver the final transcript (transformed if Transform is on,
@@ -114,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.menuBar = JotMenuBarController(recorder: recorder, delivery: delivery)
         self.menuBar.install()
 
-        self.overlay = OverlayWindowController(recorder: recorder, delivery: delivery, rewriteController: rewrite)
+        self.overlay = OverlayWindowController(recorder: recorder, delivery: delivery, articulateController: articulate)
         self.overlay.install()
 
         // Install the hide-on-close proxy delegate the first time the
@@ -158,8 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let missingPermissions = [Capability.microphone, .inputMonitoring, .accessibilityPostEvents]
             .contains { PermissionsService.shared.statuses[$0] != .granted }
         if !FirstRunState.shared.setupComplete || missingPermissions {
-            DispatchQueue.main.async {
-                WizardPresenter.present(reason: .firstRun)
+            DispatchQueue.main.async { [recorder] in
+                WizardPresenter.present(reason: .firstRun, transcriber: recorder.transcriber)
             }
         }
 

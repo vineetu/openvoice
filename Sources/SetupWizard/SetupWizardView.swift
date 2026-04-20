@@ -12,14 +12,12 @@ struct SetupWizardView: View {
         VStack(spacing: 0) {
             header
                 .padding(.horizontal, 32)
-                .padding(.top, 32)
-                .padding(.bottom, 24)
+                .padding(.top, 28)
+                .padding(.bottom, 20)
 
             Divider().opacity(0.4)
 
             stepBody
-                .padding(.horizontal, 32)
-                .padding(.vertical, 24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             Divider().opacity(0.4)
@@ -28,19 +26,15 @@ struct SetupWizardView: View {
                 .padding(.horizontal, 32)
                 .padding(.vertical, 16)
         }
-        .frame(width: 560, height: 520)
+        .frame(width: 560, height: 620)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Jot")
-                    .font(.system(size: 13, weight: .semibold))
-                    .tracking(0.4)
-                    .foregroundStyle(.secondary)
                 Spacer()
                 Text("Step \(coordinator.currentStep.rawValue + 1) of \(WizardStepID.totalCount)")
                     .font(.system(size: 11))
@@ -53,13 +47,23 @@ struct SetupWizardView: View {
 
     // MARK: - Step body
 
+    /// Scrollable so steps whose content exceeds the window height
+    /// (Cleanup with its RAW/CLEANED demo, for example) don't push the
+    /// footer offscreen. Static steps with short content render the same
+    /// because the ScrollView collapses to natural height when the
+    /// content fits.
     private var stepBody: some View {
-        ZStack {
-            currentStepView
-                .transition(transition)
-                .id(coordinator.currentStep)
+        ScrollView {
+            ZStack {
+                currentStepView
+                    .transition(transition)
+                    .id(coordinator.currentStep)
+            }
+            .padding(.horizontal, 32)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .animation(animation, value: coordinator.currentStep)
         }
-        .animation(animation, value: coordinator.currentStep)
     }
 
     @ViewBuilder
@@ -71,6 +75,8 @@ struct SetupWizardView: View {
         case .microphone: MicrophoneStep()
         case .shortcuts: ShortcutsStep()
         case .test: TestStep()
+        case .cleanup: CleanupStep()
+        case .articulateIntro: ArticulateIntroStep()
         }
     }
 

@@ -73,11 +73,13 @@ struct JotAppWindow: View {
             case .general:       GeneralPane()
             case .transcription: TranscriptionPane()
             case .sound:         SoundPane()
-            case .ai:            RewritePane()
+            case .ai:            ArticulatePane()
             case .shortcuts:     ShortcutsPane()
             }
         case .help:
             HelpPane()
+        case .about:
+            AboutPane()
         }
     }
 }

@@ -27,8 +27,8 @@ Single Xcode project, one executable target. Each layer is a Swift function boun
 | **Library** | SwiftData recordings list with search, date grouping, detail + playback, per-row actions |
 | **Settings** | Sidebar section (not a separate scene): General / Transcription / Sound / AI / Shortcuts. Per-field `info.circle` popovers with "Learn more →" deep-links into Help. Editable LLM prompts under `CustomizePromptDisclosure` |
 | **Help** | In-app prose walkthrough: Basics / Advanced / Troubleshooting. Accepts deep-links from Settings popovers |
-| **LLM** | Provider-neutral client for transcript cleanup (Transform) + voice-driven rewrite; OpenAI, Anthropic, Gemini, Vertex Gemini, Ollama. Rewrite uses a regex instruction classifier (`RewriteInstructionClassifier`) to route to one of four branch prompts — voice-preserving / structural / translation / code — composed on top of a small shared-invariants block |
-| **Rewrite** | Selection → synthetic ⌘C → record instruction → classify instruction → branch-specific LLM prompt → paste back |
+| **LLM** | Provider-neutral client for transcript cleanup (Transform) + Articulate; Apple Intelligence (on-device, default for new installs on macOS 26+), OpenAI, Anthropic, Gemini, Vertex Gemini, Ollama. Apple Intelligence bypasses the HTTP client entirely and calls the on-device `FoundationModels` framework via `AppleIntelligenceClient`. Articulate uses a regex instruction classifier (`ArticulateInstructionClassifier`) to route to one of four branch prompts — voice-preserving / structural / translation / code — composed on top of a small shared-invariants block |
+| **Articulate** | Two hotkeys, one pipeline. `.articulateCustom` (v1.4 "Rewrite Selection", raw binding key preserved): selection → synthetic ⌘C → record voice instruction → classify → branch-specific LLM prompt → paste back. `.articulate` (v1.5): selection → synthetic ⌘C → fixed `"Articulate this"` instruction → LLM → paste back. No voice capture on the fixed-prompt path |
 | **SetupWizard** | First-run window: Welcome → Permissions → Model → Microphone → Shortcuts → Test |
 | **Sounds** | Bundled chimes wrapped in a thin `AVAudioPlayer` helper |
 
@@ -45,14 +45,18 @@ Sources/
   App/            ← App layer (entry, AppDelegate, root state)
   MenuBar/        ← NSStatusItem + NSMenu
   Overlay/        ← NSPanel status-indicator pill
+  Home/           ← Landing pane (hotkey glance, recent row, first-run banner)
   Recording/      ← AVAudioEngine capture, converter, hotkey routing
   Transcription/  ← FluidAudio wrapper, post-processing, model I/O
+  LLM/            ← Provider-neutral HTTP client + AppleIntelligenceClient + prompts + classifier
+  Articulate/     ← Selection-capture + paste-back controller (fixed and custom-instruction variants)
   Permissions/    ← Mic / input-monitoring / accessibility capability modelling
   Delivery/       ← Clipboard sandwich, synthetic paste, auto-Enter
   Library/        ← SwiftData models + recordings UI
   Settings/       ← SwiftUI Settings scene panes
   SetupWizard/    ← First-run flow window
   Sounds/         ← Chime assets + AVAudioPlayer helper
+  Help/           ← In-app Help tab (Basics / Advanced / Troubleshooting cards + visuals)
 Resources/        ← Assets.xcassets, Info.plist, Jot.entitlements
 docs/             ← Requirements, feature inventory, plans, research — read-only from code
 ```
@@ -64,11 +68,11 @@ Keep each folder to its single layer. Cross-layer shared types (e.g. `Recording`
 ## Key constraints
 
 - **Transcription stays on-device.** Audio and transcripts never leave the Mac via the transcription path. The only automatic network calls are: the initial Parakeet model download, and the daily Sparkle update check.
-- **Optional LLM paths are opt-in and provider-neutral.** Transform (cleanup) and AI Rewrite reach out to whatever endpoint the user configured and *verified*. Default is off. Ollama keeps the LLM path local for users who want zero cloud.
+- **LLM paths are provider-neutral; Apple Intelligence is the default on macOS 26+.** Transform (cleanup) and Articulate route through whatever provider the user has selected. For fresh installs on macOS 26+, Apple Intelligence (on-device via the `FoundationModels` framework) is the default — no API key, no network, nothing leaves the Mac. Existing v1.4 users keep their configured provider unchanged (`@AppStorage` honors the stored value). Ollama remains available for users who want local-but-not-Apple. Cloud providers (OpenAI, Anthropic, Gemini, Vertex Gemini) are opt-in.
 - **No telemetry.** No analytics, crash reporting, or error pings. A privacy-conscious user with Little Snitch must see only: model download (first-run), appcast fetch (daily), and whatever LLM endpoint they explicitly configured.
 - **No accounts.** The app must be fully usable without signing in anywhere.
 - **Apple Silicon, macOS 14+.** Don't add compatibility shims for Intel or older macOS.
-- **Global shortcuts must not steal keys they don't own.** The cancel key (`Esc`) is only active while recording, transforming, capturing for rewrite, or rewriting.
+- **Global shortcuts must not steal keys they don't own.** The cancel key (`Esc`) is only active while recording, transforming, capturing a voice instruction for Articulate (Custom), or articulating.
 - **Native Mac feel.** SwiftUI + AppKit where appropriate, SF Symbols, system semantic colors, `NSVisualEffectView` vibrancy, HIG-aligned motion. No web-in-a-wrapper patterns.
 - **Out of scope:** cloud transcription, VAD / continuous listening, file upload, non-macOS ports, multi-user sync.
 
@@ -142,5 +146,7 @@ Keep cross-cutting concerns (cancellability, pipeline states, hotkey routing) in
 
 - `docs/design-requirements.md` — stack-agnostic product requirements (source of truth for **what**)
 - `docs/features.md` — shipping feature inventory
-- `docs/plans/transform.md` — optional LLM cleanup + AI Rewrite design
+- `docs/plans/transform.md` — optional LLM cleanup + Articulate design
+- `docs/research/apple-intelligence-as-provider.md` — Apple Intelligence default-provider decision, long-form limitations, 6-provider strategy
+- `docs/research/future-model-switching.md` — latent issue flagged for when a 2nd Parakeet variant ships
 - `docs/plans/apple-signing.md` — Developer ID signing + notarization notes

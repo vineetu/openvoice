@@ -10,6 +10,7 @@ public enum AppSidebarSelection: Hashable {
     case library
     case settings(SettingsSubsection)
     case help
+    case about
 }
 
 /// The five panes inside the expanded Settings group. Order here matches

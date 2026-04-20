@@ -59,6 +59,13 @@ final class RecorderController: ObservableObject {
         self.permissions = permissions ?? PermissionsService.shared
     }
 
+    func setAmplitudePublisher(_ publisher: AmplitudePublisher) {
+        let capture = self.capture
+        Task {
+            await capture.setAmplitudePublisher(publisher)
+        }
+    }
+
     /// Toggle between idle and recording. If recording, `stop + transcribe`.
     /// If idle, `start`. Errors surface on `state = .error(...)` rather than
     /// throwing — the caller is the UI, not a retry loop.
@@ -139,6 +146,23 @@ final class RecorderController: ObservableObject {
         guard permissions.statuses[.microphone] == .granted else {
             state = .error("Microphone permission is required.")
             return
+        }
+
+        // Defense-in-depth pre-warm. By the time the user finishes speaking
+        // and stopAndTranscribe() checks `isReady`, this has usually
+        // completed — which matters when launch-time pre-warm missed
+        // (model not cached yet) and the wizard's TestStep didn't run in
+        // this session (e.g. user skipped Test, or the wizard was never
+        // opened because setupComplete was already true). Fire-and-forget:
+        // we deliberately do NOT await,
+        // because the iOS 26.4 espresso/BNNS load-path bug (Apple dev forum
+        // 770529) could park a native C++ thread indefinitely, and a
+        // synchronous hang here would prevent recording from starting at
+        // all. Idempotent — `ensureLoaded()` early-returns if the manager
+        // is already in memory.
+        let transcriber = self.transcriber
+        Task.detached(priority: .userInitiated) { [transcriber] in
+            try? await transcriber.ensureLoaded()
         }
 
         do {

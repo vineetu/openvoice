@@ -33,17 +33,17 @@ final class PillViewModel: ObservableObject {
 
     private var recorderCancellable: AnyCancellable?
     private var deliveryCancellable: AnyCancellable?
-    private var rewriteCancellable: AnyCancellable?
-    private var rewriteResultCancellable: AnyCancellable?
+    private var articulateCancellable: AnyCancellable?
+    private var articulateResultCancellable: AnyCancellable?
 
     private weak var recorder: RecorderController?
     private weak var delivery: DeliveryService?
-    private weak var rewriteController: RewriteController?
+    private weak var articulateController: ArticulateController?
 
-    init(recorder: RecorderController, delivery: DeliveryService, rewriteController: RewriteController? = nil) {
+    init(recorder: RecorderController, delivery: DeliveryService, articulateController: ArticulateController? = nil) {
         self.recorder = recorder
         self.delivery = delivery
-        self.rewriteController = rewriteController
+        self.articulateController = articulateController
 
         recorderCancellable = recorder.$state
             .receive(on: DispatchQueue.main)
@@ -58,17 +58,17 @@ final class PillViewModel: ObservableObject {
                 self?.deliveryEvent(event)
             }
 
-        if let rewriteController {
-            rewriteCancellable = rewriteController.$state
+        if let articulateController {
+            articulateCancellable = articulateController.$state
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] state in
-                    self?.rewriteStateChanged(state)
+                    self?.articulateStateChanged(state)
                 }
-            rewriteResultCancellable = rewriteController.$lastRewrite
+            articulateResultCancellable = articulateController.$lastArticulation
                 .compactMap { $0 }
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] result in
-                    self?.showRewriteSuccess(result)
+                    self?.showArticulateSuccess(result)
                 }
         }
     }
@@ -123,10 +123,10 @@ final class PillViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Rewrite transitions
+    // MARK: - Articulate transitions
 
-    private func rewriteStateChanged(_ rewriteState: RewriteController.RewriteState) {
-        switch rewriteState {
+    private func articulateStateChanged(_ articulateState: ArticulateController.ArticulateState) {
+        switch articulateState {
         case .idle:
             switch self.state {
             case .success, .error, .hidden:
@@ -153,7 +153,7 @@ final class PillViewModel: ObservableObject {
         }
     }
 
-    func showRewriteSuccess(_ result: String) {
+    func showArticulateSuccess(_ result: String) {
         stopTick()
         transition(to: .success(preview: Self.previewText(result)))
         scheduleDismiss(after: Self.successLinger)

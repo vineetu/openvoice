@@ -9,6 +9,11 @@ struct GeneralPane: View {
     @AppStorage("jot.inputDeviceUID") private var inputDeviceUID: String = ""
     @AppStorage("jot.retentionDays") private var retentionDays: Int = 7
 
+    // Already injected at the root scene in `JotApp.swift` — consumed here so
+    // the "Run Setup Wizard…" button can forward the recorder's long-lived
+    // Transcriber into the wizard (shared-instance refactor).
+    @EnvironmentObject private var recorder: RecorderController
+
     @StateObject private var deviceWatcher = InputDeviceWatcher()
     @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
     @State private var loginToggleError: String?
@@ -67,7 +72,10 @@ struct GeneralPane: View {
             Section {
                 HStack {
                     Button("Run Setup Wizard…") {
-                        WizardPresenter.present(reason: .manualFromSettings)
+                        WizardPresenter.present(
+                            reason: .manualFromSettings,
+                            transcriber: recorder.transcriber
+                        )
                     }
                     InfoPopoverButton(
                         title: "Run Setup Wizard",

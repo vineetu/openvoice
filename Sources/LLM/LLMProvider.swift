@@ -1,6 +1,7 @@
 import Foundation
 
 enum LLMProvider: String, CaseIterable, Identifiable, Codable, Sendable {
+    case appleIntelligence
     case openai
     case anthropic
     case gemini
@@ -11,6 +12,7 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable, Sendable {
 
     var displayName: String {
         switch self {
+        case .appleIntelligence: "Apple Intelligence (on-device)"
         case .openai: "OpenAI"
         case .anthropic: "Anthropic"
         case .gemini: "Gemini"
@@ -28,12 +30,18 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable, Sendable {
     /// build time by injecting `JotDefaultEndpoint.<case>` into Info.plist
     /// (e.g. `JotDefaultEndpoint.openai`). If no override is present, the
     /// public vendor endpoint is used.
+    ///
+    /// Apple Intelligence has no endpoint — calls go through the on-device
+    /// `FoundationModels` framework. The Info.plist override system does not
+    /// apply; returns `""`.
     var defaultBaseURL: String {
+        if self == .appleIntelligence { return "" }
         let key = "JotDefaultEndpoint.\(rawValueForInfoPlist)"
         if let override = Bundle.main.infoDictionary?[key] as? String, !override.isEmpty {
             return override
         }
         switch self {
+        case .appleIntelligence: return ""
         case .openai:       return "https://api.openai.com/v1"
         case .anthropic:    return "https://api.anthropic.com/v1"
         case .gemini:       return "https://generativelanguage.googleapis.com/v1beta"
@@ -46,12 +54,17 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable, Sendable {
     /// build time by injecting `JotDefaultModel.<case>` into Info.plist
     /// (e.g. `JotDefaultModel.openai`). If no override is present, a sensible
     /// public default is used.
+    ///
+    /// Apple Intelligence routes through `SystemLanguageModel.default`; the
+    /// model identifier is managed by the OS, so returns `""`.
     var defaultModel: String {
+        if self == .appleIntelligence { return "" }
         let key = "JotDefaultModel.\(rawValueForInfoPlist)"
         if let override = Bundle.main.infoDictionary?[key] as? String, !override.isEmpty {
             return override
         }
         switch self {
+        case .appleIntelligence: return ""
         case .openai:       return "gpt-5.4-mini"
         case .anthropic:    return "claude-haiku-4-5-20251001"
         case .gemini:       return "gemini-3.1-flash-lite-preview"

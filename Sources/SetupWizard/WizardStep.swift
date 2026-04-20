@@ -9,13 +9,15 @@ enum WizardStepID: Int, CaseIterable, Identifiable, Sendable {
     case microphone
     case shortcuts
     case test
+    case cleanup
+    case articulateIntro
 
     var id: Int { rawValue }
 
     static var totalCount: Int { allCases.count }
 
     var isFirst: Bool { self == .welcome }
-    var isLast: Bool { self == .test }
+    var isLast: Bool { self == .articulateIntro }
 }
 
 /// Read-only snapshot of step presentation that the wizard shell consumes

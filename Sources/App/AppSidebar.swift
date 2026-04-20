@@ -52,11 +52,39 @@ struct AppSidebar: View {
                     tag: .settings(.shortcuts)
                 )
             } label: {
-                Label("Settings", systemImage: "gearshape")
+                // macOS 26.4 sidebar idiom: clicking the group header routes
+                // to the group's default child (General) AND keeps the group
+                // expanded — matches System Settings behavior. `DisclosureGroup`
+                // on SwiftUI 7 (Xcode 26.4.1) has no selection semantics on its
+                // label, and `List(selection:)` only tracks tags on leaf rows,
+                // so we drive the behavior with a `Button(.plain)`. Button is
+                // chosen over a bare `.onTapGesture` so VoiceOver announces
+                // a button role, keyboard activation works (Space / Return),
+                // and focus traversal is standard — per Apple's SwiftUI 7
+                // guidance to prefer controls over tap gestures for
+                // button-like interactions. The disclosure chevron rendered
+                // as DisclosureGroup chrome on the trailing edge continues to
+                // handle its own tap for users who explicitly want to
+                // collapse the group.
+                Button {
+                    selection = .settings(.general)
+                    settingsExpanded = true
+                } label: {
+                    HStack(spacing: 0) {
+                        Label("Settings", systemImage: "gearshape")
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens Settings at General.")
             }
 
             Label("Help", systemImage: "questionmark.circle")
                 .tag(AppSidebarSelection.help)
+
+            Label("About", systemImage: "info.circle")
+                .tag(AppSidebarSelection.about)
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)

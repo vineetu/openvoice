@@ -20,6 +20,13 @@ public actor Transcriber {
     private let log = Logger(subsystem: "com.jot.Jot", category: "Transcriber")
 
     private let cache: ModelCache
+    /// Bound at init and never observed afterward. Safe today because only
+    /// one `ParakeetModelID` variant exists, so no picker can actually
+    /// change the effective value at runtime. Will become a silent
+    /// wrong-model bug the moment a second variant ships — see
+    /// `docs/research/future-model-switching.md` for the full failure
+    /// modes and the two options for fixing it. Read that doc before
+    /// adding a second case to `ParakeetModelID`.
     private let modelID: ParakeetModelID
 
     private var manager: AsrManager?

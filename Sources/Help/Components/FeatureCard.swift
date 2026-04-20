@@ -52,13 +52,17 @@ struct FeatureCard<Visual: View>: View {
                     Spacer(minLength: 0)
                     if let tag {
                         Text(tag)
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
                             .background(
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(Color.primary.opacity(0.06))
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.primary.opacity(0.08))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
                             )
                     }
                 }

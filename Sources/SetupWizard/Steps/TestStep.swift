@@ -2,10 +2,11 @@ import AVFoundation
 import SwiftUI
 
 /// Step 6 — end-to-end smoke test. Records 3 seconds, transcribes, shows what
-/// was heard. Uses a dedicated `AudioCapture` + `Transcriber` rather than the
-/// shared `RecorderController` so the test does NOT kick delivery / paste /
-/// library-persistence pipelines. The wizard is a pre-flight check — it must
-/// not leave residue in the user's apps or history.
+/// was heard. Uses a dedicated `AudioCapture` so the test does NOT kick
+/// delivery / paste / library-persistence pipelines, but reuses the recorder's
+/// shared `Transcriber` (injected into the coordinator) so the ANE warm-up
+/// performed here carries over — otherwise the first post-wizard hotkey press
+/// hits a cold `AsrManager` and sits in "still loading" until relaunch.
 struct TestStep: View {
     @EnvironmentObject private var coordinator: SetupWizardCoordinator
     @AppStorage("jot.defaultModelID") private var defaultModelID: String = ParakeetModelID.tdt_0_6b_v3.rawValue
@@ -127,7 +128,7 @@ struct TestStep: View {
 
     private func updateChrome() {
         coordinator.setChrome(WizardStepChrome(
-            primaryTitle: "Done",
+            primaryTitle: "Continue",
             canAdvance: true,
             isPrimaryBusy: false,
             showsSkip: false
@@ -138,14 +139,13 @@ struct TestStep: View {
 
     private func runTest() {
         guard phase != .recording && phase != .transcribing else { return }
-        let model = selectedModel
         transcript = ""
         errorMessage = nil
         phase = .recording
 
+        let transcriber = coordinator.transcriber
         Task {
             let capture = AudioCapture()
-            let transcriber = Transcriber(cache: .shared, modelID: model)
             do {
                 try await transcriber.ensureLoaded()
                 try await capture.start()
@@ -155,6 +155,7 @@ struct TestStep: View {
                 let result = try await transcriber.transcribe(recording.samples)
                 await MainActor.run {
                     transcript = result.text
+                    coordinator.testTranscript = result.text
                     phase = .done
                 }
             } catch {

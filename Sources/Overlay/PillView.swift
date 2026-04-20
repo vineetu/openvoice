@@ -42,7 +42,7 @@ struct PillView: View {
                 }
             case .rewriting:
                 pillBody {
-                    RewritingContent(reduceMotion: reduceMotion)
+                    ArticulatingContent(reduceMotion: reduceMotion)
                 }
             case .transforming:
                 pillBody {
@@ -107,9 +107,8 @@ private struct RecordingContent: View {
     var body: some View {
         HStack(spacing: 10) {
             PulsingDot(color: Color(nsColor: .systemRed), reduceMotion: reduceMotion)
-            Equalizer(reduceMotion: reduceMotion)
-                .frame(width: 24, height: 14)
-            Spacer(minLength: 8)
+            AmplitudeTrail(reduceMotion: reduceMotion)
+                .frame(maxWidth: .infinity, minHeight: 26, maxHeight: 30)
             Text(PillViewModel.formatElapsed(elapsed))
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.9))
@@ -151,42 +150,63 @@ private struct PulsingDot: View {
     }
 }
 
-/// Audio-level equalizer. Four thin bars with staggered sin-based motion —
-/// calm and periodic, not jittery. Under Reduce Motion the bars freeze at
-/// 50% height.
-private struct Equalizer: View {
+private struct AmplitudeTrail: View {
+    @EnvironmentObject private var amp: AmplitudePublisher
     let reduceMotion: Bool
-    private let barCount = 4
-    private let barWidth: CGFloat = 3
-    private let barSpacing: CGFloat = 4
-
-    // Per-bar frequency (Hz) + phase offset (radians). Chosen so the bars
-    // drift in and out of sync without ever looking synchronized.
-    private let frequencies: [Double] = [2.3, 3.1, 2.7, 3.5]
-    private let phases: [Double] = [0.0, 1.2, 2.4, 3.6]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            GeometryReader { geo in
-                HStack(alignment: .center, spacing: barSpacing) {
-                    ForEach(0..<barCount, id: \.self) { i in
-                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                            .fill(Color.white.opacity(0.95))
-                            .frame(width: barWidth, height: barHeight(i, available: geo.size.height, t: t))
+        Group {
+            if reduceMotion {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 4, height: 4)
+                    .opacity(0.3 + 0.7 * Double(amp.history.last ?? 0))
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { _ in
+                    Canvas { ctx, size in
+                        guard amp.history.count > 1 else { return }
+                        let stepX = size.width / CGFloat(amp.history.count - 1)
+                        let midY = size.height / 2
+                        // Push deflection to the full half-height so loud
+                        // syllables hit the top/bottom edge. The sqrt power
+                        // curve below lifts quiet phonemes so they don't
+                        // collapse to a hairline at the midline.
+                        let scale = (size.height / 2) * 0.98
+                        var path = Path()
+                        for (i, value) in amp.history.enumerated() {
+                            let x = CGFloat(i) * stepX
+                            // Sqrt power curve: maps 0.1→0.32, 0.3→0.55,
+                            // 0.5→0.71, 0.8→0.89. Quiet sounds rise visibly
+                            // while loud peaks still saturate near 1.0.
+                            let boosted = sqrt(max(CGFloat(value), 0))
+                            // Small deterministic phase jitter so silence
+                            // still looks alive rather than flatlined.
+                            let phase = CGFloat(sin(Double(i) * 0.9)) * 0.6
+                            let y = midY - (boosted * scale + phase)
+                            if i == 0 { path.move(to: .init(x: x, y: y)) }
+                            else { path.addLine(to: .init(x: x, y: y)) }
+                        }
+                        ctx.stroke(
+                            path,
+                            with: .color(Color.accentColor),
+                            style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)
+                        )
                     }
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black.opacity(0.6), location: 0),
+                                .init(color: .black, location: 1)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
         }
-    }
-
-    private func barHeight(_ index: Int, available: CGFloat, t: Double) -> CGFloat {
-        if reduceMotion { return max(2, available * 0.5) }
-        // sin ∈ [-1, 1]; remap to [0.2, 1.0] so bars never fully collapse.
-        let raw = sin(t * frequencies[index] + phases[index])
-        let normalized = 0.6 + 0.4 * raw  // → [0.2, 1.0]
-        return max(2, available * CGFloat(normalized))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityHidden(true)
     }
 }
 
@@ -245,9 +265,9 @@ private struct ThreeDotLoader: View {
     }
 }
 
-// MARK: - Rewriting
+// MARK: - Articulating
 
-private struct RewritingContent: View {
+private struct ArticulatingContent: View {
     let reduceMotion: Bool
     @State private var pulse = false
 
@@ -258,7 +278,7 @@ private struct RewritingContent: View {
                 .frame(width: 7, height: 7)
             ThreeDotLoader(reduceMotion: reduceMotion)
             Spacer(minLength: 4)
-            Text("Rewriting")
+            Text("Articulating")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(pulse && !reduceMotion ? 0.6 : 0.9))
                 .animation(

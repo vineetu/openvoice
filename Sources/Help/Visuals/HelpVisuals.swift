@@ -5,7 +5,9 @@ import SwiftUI
 /// A single keyboard key rendering — rounded rect with a short label.
 ///
 /// Used inside `KeyCombo` and standalone for modifier/escape/return glyphs.
-/// Not a real input affordance; pure visual decoration.
+/// Not a real input affordance; pure visual decoration. Sized as a
+/// supporting element inside the feature-card visual strip — the actual
+/// configured shortcut is rendered prominently as the card's tag below.
 struct KeyCap: View {
     let label: String
     var width: CGFloat? = nil
@@ -16,14 +18,14 @@ struct KeyCap: View {
             .font(.system(size: 11, weight: emphasis ? .semibold : .medium, design: .rounded))
             .foregroundStyle(emphasis ? .primary : .secondary)
             .frame(minWidth: width ?? 22, minHeight: 22)
-            .padding(.horizontal, width == nil ? 6 : 0)
+            .padding(.horizontal, width == nil ? 5 : 0)
             .background(
                 RoundedRectangle(cornerRadius: 5)
                     .fill(Color.primary.opacity(0.06))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 5)
-                    .stroke(Color.primary.opacity(0.18), lineWidth: 0.5)
+                    .stroke(Color.primary.opacity(0.18), lineWidth: 0.8)
             )
     }
 }
@@ -31,7 +33,7 @@ struct KeyCap: View {
 struct KeyCombo: View {
     let keys: [String]
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             ForEach(keys.indices, id: \.self) { KeyCap(label: keys[$0]) }
         }
     }
@@ -43,9 +45,9 @@ struct KeyCombo: View {
 struct ExampleTag: View {
     var body: some View {
         Text("e.g.")
-            .font(.system(size: 9, weight: .medium, design: .rounded))
+            .font(.system(size: 10, weight: .medium, design: .rounded))
             .foregroundStyle(.secondary)
-            .tracking(0.5)
+            .tracking(0.3)
     }
 }
 
@@ -313,7 +315,7 @@ struct VoiceBubble: View {
             Image(systemName: "mic.fill")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
-            Text("rewrite this")
+            Text("articulate this")
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(.secondary)
         }
@@ -427,16 +429,16 @@ struct ModifierRequired: View {
     var body: some View {
         HStack(spacing: 10) {
             ZStack {
-                KeyCap(label: "F5", width: 28)
+                KeyCap(label: "F5", width: 70)
                 Rectangle()
                     .fill(.red.opacity(0.8))
-                    .frame(width: 32, height: 1.2)
+                    .frame(width: 80, height: 3)
                     .rotationEffect(.degrees(-18))
             }
 
             FlowArrow()
 
-            HStack(spacing: 3) {
+            HStack(spacing: 7) {
                 KeyCap(label: "⌘")
                 KeyCap(label: "⌥")
                 KeyCap(label: "⌃")
@@ -474,19 +476,19 @@ struct ConflictRings: View {
     var body: some View {
         ZStack {
             KeyCombo(keys: ["⌥", "Space"])
-                .offset(x: -14)
+                .offset(x: -40)
                 .opacity(0.8)
             KeyCombo(keys: ["⌥", "Space"])
-                .offset(x: 14)
+                .offset(x: 40)
                 .opacity(0.8)
-            Circle()
-                .stroke(.red.opacity(0.8), lineWidth: 1.2)
-                .frame(width: 42, height: 42)
-                .offset(x: -14, y: 0)
-            Circle()
-                .stroke(.red.opacity(0.8), lineWidth: 1.2)
-                .frame(width: 42, height: 42)
-                .offset(x: 14, y: 0)
+            Ellipse()
+                .stroke(.red.opacity(0.8), lineWidth: 2.4)
+                .frame(width: 200, height: 90)
+                .offset(x: -40, y: 0)
+            Ellipse()
+                .stroke(.red.opacity(0.8), lineWidth: 2.4)
+                .frame(width: 200, height: 90)
+                .offset(x: 40, y: 0)
         }
     }
 }
@@ -637,7 +639,7 @@ struct ReturnFlow: View {
         HStack(spacing: 6) {
             MiniTranscript()
             FlowArrow()
-            KeyCap(label: "⏎", width: 28)
+            KeyCap(label: "⏎", width: 70)
         }
     }
 }
@@ -723,10 +725,10 @@ struct TransformArrow: View {
     }
 }
 
-// MARK: - RewriteFlow
+// MARK: - ArticulateFlow
 
 /// Selection → mic → rewritten selection.
-struct RewriteFlow: View {
+struct ArticulateFlow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             SelectionCaret()
@@ -743,6 +745,81 @@ struct RewriteFlow: View {
                 Rectangle()
                     .fill(Color.primary.opacity(0.7))
                     .frame(width: 1, height: 12)
+            }
+        }
+    }
+}
+
+// MARK: - ArticulateRecipes
+
+/// Grid of example spoken instructions the user can give to Articulate
+/// (Custom). Replaces the earlier `ArticulateFlow` visual in Help when the
+/// card's goal shifted from "what happens" to "what can I say."
+struct ArticulateRecipes: View {
+    private let recipes = [
+        "translate to Japanese",
+        "make this a numbered list",
+        "rewrite more formally",
+        "shorten to two sentences",
+        "split by speaker",
+        "fix typos only"
+    ]
+
+    var body: some View {
+        LazyVGrid(
+            columns: [GridItem(.flexible(), spacing: 4), GridItem(.flexible(), spacing: 4)],
+            alignment: .leading,
+            spacing: 4
+        ) {
+            ForEach(recipes, id: \.self) { r in
+                Text("\u{201C}\(r)\u{201D}")
+                    .font(.system(size: 9.5, weight: .regular))
+                    .italic()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2.5)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.primary.opacity(0.06))
+                    )
+            }
+        }
+    }
+}
+
+// MARK: - LanguageChips
+
+/// 5×5 grid of ISO 639-1 codes for the 25 European languages Parakeet
+/// TDT 0.6B v3 supports. Auto-detected at dictation time — no user
+/// configuration required. Order roughly by speaker population so the
+/// most familiar codes hit the user first.
+struct LanguageChips: View {
+    private let codes: [String] = [
+        "EN", "FR", "DE", "ES", "IT",
+        "PT", "NL", "PL", "RU", "UK",
+        "SV", "DA", "FI", "EL", "CS",
+        "HU", "RO", "BG", "HR", "SK",
+        "SL", "ET", "LV", "LT", "MT"
+    ]
+
+    var body: some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 5),
+            alignment: .center,
+            spacing: 3
+        ) {
+            ForEach(codes, id: \.self) { code in
+                Text(code)
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 13)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color.primary.opacity(0.06))
+                    )
             }
         }
     }

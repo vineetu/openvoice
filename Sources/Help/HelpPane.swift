@@ -1,3 +1,4 @@
+import KeyboardShortcuts
 import SwiftUI
 
 /// Durable in-app help surface — visual-first specimen cards (design doc
@@ -79,6 +80,8 @@ struct HelpPane: View {
                     if filtered.isEmpty {
                         emptyState
                     }
+
+                    aboutFooter
                 }
                 .padding(.horizontal, 32)
                 .padding(.top, 28)
@@ -122,13 +125,36 @@ struct HelpPane: View {
                             spec.title,
                             caption: spec.caption,
                             anchor: spec.anchor,
-                            tag: spec.tag,
+                            tag: HelpPane.resolvedTag(spec),
                             visual: spec.visual
                         )
                     }
                 }
             }
         }
+    }
+
+    private var aboutFooter: some View {
+        VStack(alignment: .center, spacing: 8) {
+            Text("Jot v\(Self.appVersion) (build \(Self.appBuild))")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+            Link(
+                "Buy me a coffee ☕",
+                destination: URL(string: "https://ko-fi.com/vineetsriram")!
+            )
+            .font(.system(size: 12, weight: .medium))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 40)
+    }
+
+    private static var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+
+    private static var appBuild: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
 
     private var emptyState: some View {
@@ -198,6 +224,11 @@ extension HelpPane {
         let caption: String
         let anchor: String?
         let tag: String?
+        /// When set, the card's tag is resolved at render time to the
+        /// user's current binding for this shortcut (e.g. "⌥Space"). Falls
+        /// back to the static `tag` when no binding is set — so cards like
+        /// Push to talk still show "hold" while unbound.
+        let shortcutName: KeyboardShortcuts.Name?
         let visual: () -> AnyView
 
         init(
@@ -206,6 +237,7 @@ extension HelpPane {
             caption: String,
             anchor: String? = nil,
             tag: String? = nil,
+            shortcutName: KeyboardShortcuts.Name? = nil,
             @ViewBuilder visual: @escaping () -> some View
         ) {
             self.section = section
@@ -213,8 +245,20 @@ extension HelpPane {
             self.caption = caption
             self.anchor = anchor
             self.tag = tag
+            self.shortcutName = shortcutName
             self.visual = { AnyView(visual()) }
         }
+    }
+
+    /// Resolve the tag for a card. Dynamic bindings win over the static
+    /// `tag` string — so if the user has customized their Toggle
+    /// recording hotkey, the help card reflects that, not the default.
+    static func resolvedTag(_ spec: CardSpec) -> String? {
+        if let name = spec.shortcutName,
+           let shortcut = KeyboardShortcuts.getShortcut(for: name) {
+            return shortcut.description
+        }
+        return spec.tag
     }
 }
 
@@ -230,7 +274,7 @@ extension HelpPane {
             title: "Toggle recording",
             caption: "Press to start, press again to stop and transcribe. The primary dictation hotkey.",
             anchor: "help.dictation.basics",
-            tag: "⌥Space"
+            shortcutName: .toggleRecording
         ) {
             HStack(spacing: 10) {
                 ExampleTag()
@@ -249,7 +293,8 @@ extension HelpPane {
             title: "Push to talk",
             caption: "Hold to record, release to transcribe. Use when you want precise control over the capture window.",
             anchor: "help.shortcuts.basics",
-            tag: "hold"
+            tag: "hold",
+            shortcutName: .pushToTalk
         ) {
             HStack(spacing: 8) {
                 ExampleTag()
@@ -272,11 +317,11 @@ extension HelpPane {
             section: .basics,
             title: "Paste last transcription",
             caption: "Pastes your most recent transcript again at the cursor.",
-            tag: "⌥."
+            shortcutName: .pasteLastTranscription
         ) {
             HStack(spacing: 8) {
                 ExampleTag()
-                KeyCombo(keys: ["⌥", "."])
+                KeyCombo(keys: ["⌥", ","])
                 FlowArrow()
                 ClipboardGlyph(withContent: true)
                     .scaleEffect(0.6)
@@ -288,26 +333,63 @@ extension HelpPane {
 
         CardSpec(
             section: .basics,
-            title: "Rewrite selection",
-            caption: "Select text, press the shortcut, speak an instruction. Jot understands structural changes (\u{201C}make it a list\u{201D}), translations, code edits, and tone shifts.",
-            anchor: "help.rewrite.overview",
-            tag: "voice"
+            title: "Articulate (Custom)",
+            caption: "Select any text, press the shortcut, speak an instruction. Useful for translations, reshaping structure (bullets, lists, summaries), tone shifts, code edits, and speaker splits. Cloud providers handle the harder prompts best.",
+            anchor: "help.articulate.overview",
+            shortcutName: .articulateCustom
         ) {
-            RewriteFlow()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    ExampleTag()
+                    KeyCombo(keys: ["⌥", "."])
+                }
+                ArticulateRecipes()
+            }
+        },
+
+        CardSpec(
+            section: .basics,
+            title: "Articulate",
+            caption: "Select text and press the shortcut. Jot sends the selection to your AI provider with a built-in \u{201C}Articulate this\u{201D} instruction — no dictation step. Use when you just want quick cleanup without speaking an instruction.",
+            anchor: "help.basics.articulate",
+            shortcutName: .articulate
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    ExampleTag()
+                    KeyCombo(keys: ["⌥", "/"])
+                }
+                HStack(spacing: 8) {
+                    SelectionCaret()
+                    FlowArrow()
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.accentColor)
+                    FlowArrow()
+                    HStack(spacing: 2) {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Color.green.opacity(0.8))
+                            .frame(width: 44, height: 10)
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.7))
+                            .frame(width: 1, height: 12)
+                    }
+                }
+            }
         },
 
         CardSpec(
             section: .basics,
             title: "Cancel",
-            caption: "Drops the current recording or rewrite without transcribing. Hardcoded — not configurable.",
+            caption: "Drops the current recording or articulate without transcribing. Hardcoded — not configurable.",
             tag: "esc"
         ) {
             HStack(spacing: 10) {
                 ZStack {
-                    KeyCap(label: "esc", width: 40)
+                    KeyCap(label: "esc", width: 100)
                     Rectangle()
                         .fill(.red.opacity(0.8))
-                        .frame(width: 48, height: 1.4)
+                        .frame(width: 112, height: 3)
                         .rotationEffect(.degrees(-14))
                 }
                 FlowArrow()
@@ -324,6 +406,16 @@ extension HelpPane {
             tag: "ANE"
         ) {
             ParakeetPipeline()
+        },
+
+        CardSpec(
+            section: .basics,
+            title: "Multilingual dictation",
+            caption: "Parakeet auto-detects 25 European languages — English, French, German, Spanish, Italian, Polish, Russian, and 18 more. Just speak in whatever language works for you. No setup, no switching. Pair with Articulate to translate into any other language on the way out.",
+            anchor: "help.basics.multilingual",
+            tag: "25 langs"
+        ) {
+            LanguageChips()
         },
 
         CardSpec(
@@ -392,7 +484,7 @@ extension HelpPane {
             HStack(spacing: 10) {
                 MiniTranscript()
                 FlowArrow()
-                KeyCap(label: "⏎", width: 32)
+                KeyCap(label: "⏎", width: 80)
                 FlowArrow()
                 Image(systemName: "paperplane.fill")
                     .font(.system(size: 13))
@@ -415,11 +507,28 @@ extension HelpPane {
         CardSpec(
             section: .advanced,
             title: "LLM providers",
-            caption: "Five providers for Auto-correct and Rewrite: OpenAI, Anthropic, Gemini, Vertex Gemini, Ollama.",
+            caption: "Six providers for Auto-correct and Articulate: Apple Intelligence (on-device), OpenAI, Anthropic, Gemini, Vertex Gemini, Ollama.",
             anchor: "help.ai.providers",
-            tag: "5"
+            tag: "6"
         ) {
             ProviderBadges()
+        },
+
+        CardSpec(
+            section: .advanced,
+            title: "Apple Intelligence",
+            caption: "Jot's default cleanup and articulate run entirely on your Mac via Apple's on-device model — no API key, no network, free. For long-form dictations (several paragraphs or more), the on-device model may produce less polished results than cloud providers. Switch to Anthropic or Gemini in Settings → AI for higher quality on long content.",
+            anchor: "help.advanced.apple-intelligence",
+            tag: "on-device"
+        ) {
+            VStack(spacing: 6) {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+                Text("on-device")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
         },
 
         CardSpec(
@@ -472,7 +581,7 @@ extension HelpPane {
         CardSpec(
             section: .advanced,
             title: "Customize prompt",
-            caption: "Edit the cleanup prompt, or the shared invariants behind Rewrite. Reset to default restores the shipped text.",
+            caption: "Edit the cleanup prompt, or the shared invariants behind Articulate. Reset to default restores the shipped text.",
             anchor: "help.ai.customPrompt",
             tag: "editable"
         ) {

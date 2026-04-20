@@ -10,7 +10,8 @@ struct ShortcutsPane: View {
         (.toggleRecording, "Toggle recording"),
         (.pushToTalk, "Push to talk (hold)"),
         (.pasteLastTranscription, "Paste last transcription"),
-        (.rewriteSelection, "Rewrite selection"),
+        (.articulateCustom, "Articulate (Custom)"),
+        (.articulate, "Articulate"),
     ]
 
     var body: some View {
@@ -59,7 +60,7 @@ struct ShortcutsPane: View {
                         .foregroundStyle(.secondary)
                     InfoPopoverButton(
                         title: "Cancel recording",
-                        body: "Press Escape to cancel an active recording, transform, or rewrite. Hardcoded and not configurable — only active while Jot is mid-capture.",
+                        body: "Press Escape to cancel an active recording, transform, or articulate. Hardcoded and not configurable — only active while Jot is mid-capture.",
                         helpAnchor: "help.shortcuts.basics"
                     )
                 }
@@ -91,8 +92,10 @@ struct ShortcutsPane: View {
             return "Hold to record; release to transcribe. Prefer this when you want precise control over the capture window."
         case .pasteLastTranscription:
             return "Paste the most recent transcript again at the cursor. Handy when you need the same text in multiple places."
-        case .rewriteSelection:
-            return "Select text in any app, press this shortcut, speak an instruction — Jot rewrites the selection with your configured LLM and pastes it back."
+        case .articulateCustom:
+            return "Select text in any app, press this shortcut, speak an instruction — Jot articulates the selection with your configured LLM and pastes it back."
+        case .articulate:
+            return "Apply a built-in articulate prompt to the selected text — no voice needed. Press the shortcut with text selected and Jot pastes the result back."
         default:
             return "A global hotkey. Requires at least one modifier key (⌘, ⌥, ⌃, or ⇧)."
         }
@@ -115,7 +118,8 @@ struct ShortcutsPane: View {
             .toggleRecording,
             .pushToTalk,
             .pasteLastTranscription,
-            .rewriteSelection
+            .articulateCustom,
+            .articulate
         )
         refreshToken &+= 1
     }

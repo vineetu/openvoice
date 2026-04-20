@@ -21,7 +21,10 @@ enum WizardPresenter {
 
     private static var controller: SetupWizardWindowController?
 
-    static func present(reason: PresentReason) {
+    /// Present the wizard, injecting the recorder's long-lived `Transcriber`
+    /// so that `TestStep`'s end-to-end smoke test warms the very same
+    /// `AsrManager` the recorder uses on the first hotkey press.
+    static func present(reason: PresentReason, transcriber: Transcriber) {
         if let controller {
             // Already open — just bring it forward.
             controller.present()
@@ -30,11 +33,14 @@ enum WizardPresenter {
 
         let coordinator = SetupWizardCoordinator(
             startingAt: .welcome,
+            transcriber: transcriber,
             onFinish: { closeWindow() }
         )
         let wc = SetupWizardWindowController(
             coordinator: coordinator,
-            onClose: { controller = nil }
+            onClose: {
+                controller = nil
+            }
         )
         self.controller = wc
         wc.present()

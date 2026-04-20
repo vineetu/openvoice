@@ -2,8 +2,12 @@ import Foundation
 
 actor LLMClient {
     private let session = URLSession.shared
+    private let appleClient = AppleIntelligenceClient()
 
-    func rewrite(selectedText: String, instruction: String) async throws -> String {
+    /// Articulate a selection according to the user's spoken instruction.
+    /// (Formerly `rewrite(…)` — renamed with the v1.5 "Articulate (Custom)"
+    /// relabel. Behaviorally identical to v1.4 `rewrite`.)
+    func articulate(selectedText: String, instruction: String) async throws -> String {
         let config = await MainActor.run {
             let c = LLMConfiguration.shared
             return (
@@ -11,23 +15,32 @@ actor LLMClient {
                 apiKey: c.apiKey,
                 baseURL: c.effectiveBaseURL,
                 model: c.effectiveModel,
-                sharedInvariants: c.rewritePrompt
+                sharedInvariants: c.articulatePrompt
+            )
+        }
+
+        // Route the instruction to a branch-specific tendency block.
+        // The classifier is a hint, not a gate — the user's instruction
+        // is embedded verbatim below and always wins over the tendency.
+        let branch = ArticulateInstructionClassifier.classify(instruction)
+        let systemPrompt = """
+            \(config.sharedInvariants)
+
+            \(ArticulateBranchPrompt.prompt(for: branch))
+            """
+
+        // On-device Apple Intelligence short-circuits the HTTP path entirely.
+        if config.provider == .appleIntelligence {
+            return try await appleClient.articulate(
+                selectedText: selectedText,
+                instruction: instruction,
+                branchPrompt: systemPrompt
             )
         }
 
         if config.provider != .ollama {
             guard !config.apiKey.isEmpty else { throw LLMError.noAPIKey }
         }
-
-        // Route the instruction to a branch-specific tendency block.
-        // The classifier is a hint, not a gate — the user's instruction
-        // is embedded verbatim below and always wins over the tendency.
-        let branch = RewriteInstructionClassifier.classify(instruction)
-        let systemPrompt = """
-            \(config.sharedInvariants)
-
-            \(RewriteBranchPrompt.prompt(for: branch))
-            """
 
         // XML-tag delimiters (OWASP 2025 prompt-injection hardening) and
         // an explicit "instruction is the primary directive" framing so
@@ -86,6 +99,11 @@ actor LLMClient {
         temperature: Double = 0.3
     ) throws -> URLRequest {
         switch provider {
+        case .appleIntelligence:
+            // Apple Intelligence is dispatched before request building.
+            // If this branch is reached it's a programmer error — callers
+            // must route `.appleIntelligence` through `AppleIntelligenceClient`.
+            throw LLMError.appleIntelligenceUnavailable
         case .openai, .ollama:
             return try buildOpenAIRequest(
                 baseURL: baseURL, apiKey: apiKey, model: model,
@@ -202,6 +220,10 @@ actor LLMClient {
 
         let text: String?
         switch provider {
+        case .appleIntelligence:
+            // Apple Intelligence never reaches parse — responses are in-memory
+            // strings from FoundationModels. If we're here it's a programmer error.
+            throw LLMError.appleIntelligenceUnavailable
         case .openai, .ollama:
             text = (root["choices"] as? [[String: Any]])?
                 .first?["message"]
@@ -235,6 +257,14 @@ actor LLMClient {
                 baseURL: c.effectiveBaseURL,
                 model: c.effectiveModel,
                 systemPrompt: c.transformPrompt
+            )
+        }
+
+        // On-device Apple Intelligence short-circuits the HTTP path entirely.
+        if config.provider == .appleIntelligence {
+            return try await appleClient.transform(
+                transcript: transcript,
+                instruction: config.systemPrompt
             )
         }
 
@@ -308,6 +338,10 @@ actor LLMClient {
                 baseURL: c.effectiveBaseURL,
                 model: c.effectiveModel
             )
+        }
+
+        if config.provider == .appleIntelligence {
+            return AppleIntelligenceClient.isAvailable
         }
 
         if config.provider != .ollama {

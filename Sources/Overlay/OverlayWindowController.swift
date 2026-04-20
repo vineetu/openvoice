@@ -13,6 +13,7 @@ final class OverlayWindowController {
     private let recorder: RecorderController
     private let delivery: DeliveryService
     private let model: PillViewModel
+    private let amplitudePublisher = AmplitudePublisher()
 
     private var panel: OverlayPanel?
     private var screenChangeObserver: NSObjectProtocol?
@@ -28,14 +29,16 @@ final class OverlayWindowController {
     static let horizontalPadding: CGFloat = 12
     static let bottomPadding: CGFloat = 24
 
-    init(recorder: RecorderController, delivery: DeliveryService, rewriteController: RewriteController? = nil) {
+    init(recorder: RecorderController, delivery: DeliveryService, articulateController: ArticulateController? = nil) {
         self.recorder = recorder
         self.delivery = delivery
-        self.model = PillViewModel(recorder: recorder, delivery: delivery, rewriteController: rewriteController)
+        self.model = PillViewModel(recorder: recorder, delivery: delivery, articulateController: articulateController)
     }
 
     func install() {
+        recorder.setAmplitudePublisher(amplitudePublisher)
         let rootView = PillView(model: model)
+            .environmentObject(amplitudePublisher)
         let panel = OverlayPanel(rootView: rootView)
         self.panel = panel
 

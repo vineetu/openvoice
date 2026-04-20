@@ -2,6 +2,7 @@
 import CoreAudio
 import Foundation
 import os.log
+import SwiftUI
 
 /// Errors surfaced by `AudioCapture` when the audio engine path fails in a
 /// way the caller needs to distinguish. Device/driver errors are wrapped
@@ -32,6 +33,8 @@ public enum AudioCaptureError: Error, Sendable {
 public actor AudioCapture {
     private let log = Logger(subsystem: "com.jot.Jot", category: "AudioCapture")
 
+    nonisolated(unsafe) public weak var amplitudePublisher: AmplitudePublisher?
+
     private var engine: AVAudioEngine?
     private var converter: AVAudioConverter?
     private var converterInputFormat: AVAudioFormat?
@@ -44,6 +47,10 @@ public actor AudioCapture {
 
     public init(recordingsDirectory: URL = AudioCapture.defaultRecordingsDirectory) {
         self.recordingsDirectory = recordingsDirectory
+    }
+
+    public func setAmplitudePublisher(_ publisher: AmplitudePublisher?) {
+        amplitudePublisher = publisher
     }
 
     /// `~/Library/Application Support/Jot/Recordings/`. Created lazily on
@@ -129,6 +136,15 @@ public actor AudioCapture {
         // to keep latency low, large enough to avoid tap overhead dominating.
         input.installTap(onBus: 0, bufferSize: 4096, format: hardwareFormat) { [weak self] buffer, _ in
             guard let self else { return }
+            // LOAD-BEARING: RMS must be computed from the PRE-CONVERTER hardware-rate
+            // buffer here. Moving this computation after the AVAudioConverter step
+            // (in `append(_:)`) drops update cadence from ~11 Hz to ~3.9 Hz and the
+            // waveform will visibly stutter. Do not move.
+            let level = AmplitudePublisher.rms(from: buffer)
+            let publisher = self.amplitudePublisher
+            Task { @MainActor [weak publisher] in
+                publisher?.append(rms: level)
+            }
             // Copy the buffer payload out of the audio thread before hopping
             // into the actor. `AVAudioPCMBuffer` is reference-type and the
             // engine reuses the underlying storage, so a snapshot is
@@ -171,6 +187,10 @@ public actor AudioCapture {
         )
 
         resetState()
+        let publisher = amplitudePublisher
+        Task { @MainActor [weak publisher] in
+            publisher?.reset()
+        }
         return recording
     }
 
@@ -183,6 +203,10 @@ public actor AudioCapture {
             try? FileManager.default.removeItem(at: url)
         }
         resetState()
+        let publisher = amplitudePublisher
+        Task { @MainActor [weak publisher] in
+            publisher?.reset()
+        }
     }
 
     // MARK: - Tap handling
