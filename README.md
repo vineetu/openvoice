@@ -8,7 +8,7 @@ Native macOS dictation utility. Press a hotkey, speak, and text appears at your 
 
 **Dictation** — Hit ⌥Space (or your custom shortcut), speak, and the transcript is pasted wherever your cursor is. Works in any app. Push-to-talk mode available too — hold the key, release to transcribe.
 
-**AI Rewrite** — Select text, trigger the rewrite shortcut, and speak an instruction ("make this more formal", "fix the grammar", "translate to Spanish"). Jot sends the selected text + your voice instruction to an LLM, and the rewritten text replaces your selection. Supports OpenAI, Anthropic, Gemini, Vertex Gemini, and Ollama (fully local) — configure the provider, endpoint, and API key in Settings. The prompts for both cleanup and rewrite are editable for power users, with a one-click reset.
+**AI Rewrite** — Select text, trigger the rewrite shortcut, and speak an instruction ("make this more formal", "fix the grammar", "translate to Spanish"). Jot sends the selected text + your voice instruction to an LLM, and the rewritten text replaces your selection. Supports OpenAI, Anthropic, Gemini, and Ollama (fully local) — configure the provider, endpoint, and API key in Settings. The prompts for both cleanup and rewrite are editable for power users, with a one-click reset.
 
 **Transcript cleanup (optional)** — Opt in and every dictation gets a quick LLM pass to strip filler words ("um", "you know", false starts) and fix grammar while preserving your tone and meaning. Off by default; falls back to the raw transcript on any failure; runs against your configured provider (including local Ollama).
 

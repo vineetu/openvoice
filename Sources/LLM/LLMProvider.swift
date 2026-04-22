@@ -5,7 +5,6 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable, Sendable {
     case openai
     case anthropic
     case gemini
-    case vertexGemini
     case ollama
 
     var id: String { rawValue }
@@ -16,7 +15,6 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable, Sendable {
         case .openai: "OpenAI"
         case .anthropic: "Anthropic"
         case .gemini: "Gemini"
-        case .vertexGemini: "Vertex Gemini"
         case .ollama: "Ollama (local)"
         }
     }
@@ -45,7 +43,6 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable, Sendable {
         case .openai:       return "https://api.openai.com/v1"
         case .anthropic:    return "https://api.anthropic.com/v1"
         case .gemini:       return "https://generativelanguage.googleapis.com/v1beta"
-        case .vertexGemini: return ""
         case .ollama:       return "http://localhost:11434/v1"
         }
     }
@@ -68,7 +65,6 @@ enum LLMProvider: String, CaseIterable, Identifiable, Codable, Sendable {
         case .openai:       return "gpt-5.4-mini"
         case .anthropic:    return "claude-haiku-4-5-20251001"
         case .gemini:       return "gemini-3.1-flash-lite-preview"
-        case .vertexGemini: return "gemini-1.5-flash"
         case .ollama:       return "llama3.2:3b"
         }
     }

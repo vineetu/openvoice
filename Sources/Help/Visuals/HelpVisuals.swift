@@ -208,7 +208,6 @@ struct ProviderBadges: View {
         ("O", .primary, "OpenAI"),
         ("A", .orange, "Anthropic"),
         ("G", .blue, "Gemini"),
-        ("V", .cyan, "Vertex"),
         ("L", .purple, "Ollama"),
     ]
 
