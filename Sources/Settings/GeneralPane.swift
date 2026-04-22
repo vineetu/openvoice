@@ -14,12 +14,18 @@ struct GeneralPane: View {
     // Transcriber into the wizard (shared-instance refactor).
     @EnvironmentObject private var recorder: RecorderController
 
+    /// Donation reminder toggle — master switch for the Home donation
+    /// card AND the About "months saved" badge (one switch, two
+    /// surfaces). See `docs/research/donation-reminder.md` §7.5.
+    @ObservedObject private var donationStore = DonationStore.shared
+
     @StateObject private var deviceWatcher = InputDeviceWatcher()
     @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
     @State private var loginToggleError: String?
     @State private var showSoftAlert = false
     @State private var showHardAlert = false
     @State private var showPermissionsAlert = false
+    @State private var showRestartAlert = false
     @State private var softPopover = false
     @State private var hardPopover = false
     @State private var permsPopover = false
@@ -39,6 +45,7 @@ struct GeneralPane: View {
                 Text("Custom device selection is temporarily disabled while we fix a bug — Jot follows your macOS Sound settings default for now.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
 
             Section {
@@ -72,22 +79,46 @@ struct GeneralPane: View {
                 Text("Older recordings are deleted automatically.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
 
-            Section {
-                HStack {
-                    Button("Run Setup Wizard…") {
+            Section("Troubleshooting") {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Restart Jot")
+                            .font(.system(size: 13, weight: .regular))
+                        Text("Re-register global shortcuts.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Restart…") { showRestartAlert = true }
+                    InfoPopoverButton(
+                        title: "Restart Jot",
+                        body: "Fixes stuck global shortcuts by relaunching the app. If another app grabbed a hotkey while Jot was off, macOS silently prevents Jot from re-registering it — restarting re-registers cleanly. Your settings and recordings are preserved.",
+                        helpAnchor: "help.troubleshooting.hotkey-stuck"
+                    )
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Run Setup Wizard Again")
+                            .font(.system(size: 13, weight: .regular))
+                        Text("Walk through permissions, model, and hotkey setup again.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Run…") {
                         WizardPresenter.present(
                             reason: .manualFromSettings,
                             transcriber: recorder.transcriber
                         )
                     }
                     InfoPopoverButton(
-                        title: "Run Setup Wizard",
-                        body: "Relaunches the first-run onboarding flow. Useful if you want to revisit permissions, model download, or hotkey setup. When on: you can walk through each step again without reinstalling Jot.",
+                        title: "Run Setup Wizard Again",
+                        body: "Relaunches the first-run onboarding flow. Useful if you want to revisit permissions, model download, or hotkey setup. You can walk through each step again without reinstalling Jot.",
                         helpAnchor: "help.general.setup-wizard"
                     )
-                    Spacer()
                 }
             }
 
@@ -114,6 +145,21 @@ struct GeneralPane: View {
                     alert: $showPermissionsAlert
                 )
             }
+
+            Section("Reminders") {
+                HStack {
+                    Toggle(
+                        "Show donation reminder and savings estimate",
+                        isOn: $donationStore.reminderEnabled
+                    )
+                    .help("Show the dismissible donation card on Home and the \"months saved\" line in About.")
+                    Spacer()
+                    InfoPopoverButton(
+                        title: "Donation reminder",
+                        body: "Jot counts your successful dictations locally to time a single donation nudge on the Home tab, and computes the \"months saved vs comparable tools\" line in About from the day you first launched Jot. Nothing is uploaded — the counters live in your Mac's preferences only. Turn this off to hide both surfaces."
+                    )
+                }
+            }
         }
         .formStyle(.grouped)
         .alert("Reset settings?", isPresented: $showSoftAlert) {
@@ -133,6 +179,12 @@ struct GeneralPane: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Revokes Jot's microphone, input monitoring, and accessibility grants so macOS re-asks on next launch. Your recordings and settings stay. Jot will relaunch.")
+        }
+        .alert("Restart Jot?", isPresented: $showRestartAlert) {
+            Button("Restart") { RestartHelper.relaunch() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Jot will quit and reopen, re-registering global shortcuts from scratch. Your settings and recordings are preserved.")
         }
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled

@@ -7,18 +7,31 @@ import SwiftUI
 enum ResetActions {
     static func softReset() {
         let defaults = UserDefaults.standard
-        for key in [
+        var keys: [String] = [
             "jot.llm.provider",
+            // Legacy shared-bucket keys (pre per-provider refactor). Kept in
+            // this list so reset still cleans up any stale value on a user
+            // who ran an older build.
             "jot.llm.baseURL",
             "jot.llm.model",
             "jot.llm.transformPrompt",
             "jot.llm.rewritePrompt",
             "jot.transformEnabled"
-        ] {
+        ]
+        for provider in LLMConfiguration.bucketedProviders {
+            keys.append("jot.llm.\(provider.rawValue).baseURL")
+            keys.append("jot.llm.\(provider.rawValue).model")
+        }
+        for key in keys {
             defaults.removeObject(forKey: key)
         }
 
-        LLMConfiguration.clearAPIKey()
+        // Legacy shared keychain entry (pre per-provider refactor).
+        KeychainHelper.delete(key: "jot.llm.apiKey")
+        // Per-provider keychain entries.
+        for provider in LLMConfiguration.bucketedProviders {
+            KeychainHelper.delete(key: "jot.llm.\(provider.rawValue).apiKey")
+        }
         FirstRunState.shared.reset()
 
         KeyboardShortcuts.reset(

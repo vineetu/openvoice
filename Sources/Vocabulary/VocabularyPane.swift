@@ -14,10 +14,10 @@ enum BoostModelStatus: Equatable {
 ///
 /// Product intent (see docs/research/ctc-vocabulary-boosting.md §7): a
 /// short list of terms Jot should prefer — product names, proper nouns,
-/// jargon. 80% of entries are just the term; 20% carry a "sounds like"
-/// alias list. Row design follows Things / Linear — collapsed rows show
-/// just the term, clicking unfolds the row to reveal the aliases field
-/// in place. No text editor, no pipe-separated syntax in the primary path.
+/// jargon. Each row is one visible term input; the v1.5 expandable
+/// "sounds-like" alias field was removed for MVP and will return later
+/// (the `VocabTerm.aliases` array persists unchanged so no migration is
+/// needed when we add it back).
 ///
 /// MVP scope: UI + file-based persistence only. The actual CTC rescoring
 /// pipeline (downloading the 97.5 MB CTC encoder bundle, wiring
@@ -26,7 +26,6 @@ enum BoostModelStatus: Equatable {
 /// UI shape before we pay the model-download engineering cost.
 struct VocabularyPane: View {
     @StateObject private var store = VocabularyStore.shared
-    @State private var expandedID: VocabTerm.ID?
     @FocusState private var focusedID: VocabTerm.ID?
     @State private var boostModelStatus: BoostModelStatus = .notDownloaded
 
@@ -41,9 +40,7 @@ struct VocabularyPane: View {
                     ForEach(store.terms) { term in
                         VocabRow(
                             term: binding(for: term.id),
-                            isExpanded: expandedID == term.id,
                             focused: $focusedID,
-                            onToggle: { toggle(term.id) },
                             onDelete: { delete(term.id) }
                         )
                     }
@@ -257,7 +254,6 @@ struct VocabularyPane: View {
 
     private func addTerm() {
         let new = store.addBlankTerm()
-        expandedID = new.id
         // Focus lands inside the row's term field after the ForEach
         // rebuilds — a short runloop hop is enough for SwiftUI to
         // install the focus proxy.
@@ -266,14 +262,7 @@ struct VocabularyPane: View {
         }
     }
 
-    private func toggle(_ id: VocabTerm.ID) {
-        withAnimation(.easeInOut(duration: 0.18)) {
-            expandedID = (expandedID == id) ? nil : id
-        }
-    }
-
     private func delete(_ id: VocabTerm.ID) {
-        if expandedID == id { expandedID = nil }
         withAnimation(.easeInOut(duration: 0.15)) {
             store.delete(id: id)
         }

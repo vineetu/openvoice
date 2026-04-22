@@ -30,15 +30,16 @@ public final class LogScanner: ObservableObject {
         let contents = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
         let byteSize = contents.utf8.count
 
-        let key = LLMConfiguration.shared.apiKey
-        let baseURL = UserDefaults.standard.string(forKey: "jot.llm.baseURL")
+        let config = LLMConfiguration.shared
+        let keys = LLMConfiguration.bucketedProviders.map { config.apiKey(for: $0) }
+        let baseURLs = LLMConfiguration.bucketedProviders.map { config.baseURL(for: $0) }
         let transcripts = fetchTranscripts()
         let home = NSHomeDirectory()
 
         let results = PrivacyScanner.scan(
             logContents: contents,
-            currentAPIKey: key,
-            customBaseURL: baseURL,
+            currentAPIKeys: keys,
+            customBaseURLs: baseURLs,
             knownTranscripts: transcripts,
             homeDirectory: home
         )

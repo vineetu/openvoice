@@ -1,0 +1,51 @@
+# macOS
+.DS_Store
+
+# Xcode
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserdatad/
+*.xcuserstate
+DerivedData/
+build/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+# Note: Package.resolved IS committed (not ignored)
+
+# Distribution output
+dist/
+
+# Secrets / credentials (defensive — none should be in repo)
+.env
+*.p12
+*.p8
+*.pem
+*.key
+*.cer
+
+# Flavor-specific build config — never committed
+.flavor-*.env
+.flavor-*.overrides
+
+# Docs not for public repo
+docs/plans/
+docs/research/
+docs/screenshot/
+docs/spike-results/
+docs/task-breakdown-phase1.md
+
+# Pre-flight spike packages (standalone tests)
+Spikes/
+
+# iOS work-in-progress — not ready to ship, committed in a later release
+iOS/

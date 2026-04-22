@@ -28,6 +28,7 @@ struct ArticulateIntroStep: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .textSelection(.enabled)
 
             if let transcript = coordinator.testTranscript,
                !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -40,11 +41,13 @@ struct ArticulateIntroStep: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
 
             Text("Same AI provider as Cleanup — change in Settings → AI. Rebind either hotkey in Settings → Shortcuts.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
 
             Spacer(minLength: 0)
         }
@@ -118,6 +121,7 @@ struct ArticulateIntroStep: View {
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.leading, 12)
+                .textSelection(.enabled)
         }
     }
 
@@ -186,6 +190,7 @@ struct ArticulateIntroStep: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
             }
             Spacer(minLength: 0)
         }

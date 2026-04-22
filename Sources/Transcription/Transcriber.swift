@@ -49,6 +49,7 @@ public actor Transcriber {
         }
 
         do {
+            await ErrorLog.shared.info(component: "Transcriber", message: "Parakeet load start", context: ["modelID": modelID.rawValue])
             let models = try await AsrModels.load(
                 from: directory,
                 version: modelID.fluidAudioVersion
@@ -57,9 +58,12 @@ public actor Transcriber {
             try await manager.loadModels(models)
             self.manager = manager
             log.info("Parakeet loaded")
+            await ErrorLog.shared.info(component: "Transcriber", message: "Parakeet load complete", context: ["modelID": modelID.rawValue])
         } catch let error as TranscriberError {
+            await ErrorLog.shared.error(component: "Transcriber", message: "Parakeet load failed", context: ["modelID": modelID.rawValue, "error": ErrorLog.redactedAppleError(error)])
             throw error
         } catch {
+            await ErrorLog.shared.error(component: "Transcriber", message: "Parakeet load failed", context: ["modelID": modelID.rawValue, "error": ErrorLog.redactedAppleError(error)])
             throw TranscriberError.fluidAudio(error)
         }
     }
@@ -92,6 +96,7 @@ public actor Transcriber {
         do {
             result = try await manager.transcribe(samples, source: .microphone)
         } catch {
+            await ErrorLog.shared.error(component: "Transcriber", message: "FluidAudio transcribe failed", context: ["sampleCount": String(samples.count), "error": ErrorLog.redactedAppleError(error)])
             throw TranscriberError.fluidAudio(error)
         }
 
@@ -113,6 +118,7 @@ public actor Transcriber {
                 }
             } catch {
                 log.error("vocabulary rescore failed — falling back to raw: \(error.localizedDescription)")
+                await ErrorLog.shared.warn(component: "Transcriber", message: "Vocabulary rescore failed, fell back to raw", context: ["error": ErrorLog.redactedAppleError(error)])
             }
         }
 

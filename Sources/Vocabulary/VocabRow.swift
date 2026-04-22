@@ -1,94 +1,45 @@
 import SwiftUI
 
-/// A single row in the Vocabulary pane. Collapsed: just the term, with a
-/// quiet "N sounds-like" badge if the term has aliases. Expanded: the
-/// term field remains editable and an aliases field appears below.
+/// A single row in the Vocabulary pane: one visible, tappable text field
+/// for the term, with a hover-to-reveal delete button.
 ///
-/// Tap toggles expansion. `↩` in the term field collapses the row.
-/// Hover reveals a trailing `×` delete button. Matches the Things /
-/// Linear idiom described in the research doc §7.
+/// The v1.5 "sounds-like" alias field was removed because the plain-text
+/// term field was visually indistinguishable from a static label — users
+/// clicked "Add Term" and couldn't tell where to type. The `VocabTerm`
+/// model still carries an `aliases` array so the file format is stable
+/// and the UI can add them back later without a migration.
 struct VocabRow: View {
     @Binding var term: VocabTerm
-    let isExpanded: Bool
     var focused: FocusState<VocabTerm.ID?>.Binding
-    let onToggle: () -> Void
     let onDelete: () -> Void
 
     @State private var isHovered = false
-    @State private var aliasesDraft: String = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: isExpanded ? 8 : 0) {
-            HStack(spacing: 8) {
-                TextField("Term", text: $term.text)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13, design: .monospaced))
-                    .focused(focused, equals: term.id)
-                    .onSubmit {
-                        // Collapse on Return regardless of aliases — a
-                        // keyboard-perfect "tab to aliases" flow would
-                        // need a two-field focus state per row; Phase C
-                        // polish. For now the user clicks into the
-                        // aliases field when they want to edit it.
-                        if isExpanded { onToggle() }
-                    }
-
-                if let warning = warningMessage {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.orange)
-                        .help(warning)
-                }
-
-                Spacer(minLength: 4)
-
-                if !term.aliases.isEmpty && !isExpanded {
-                    Text("\(term.aliases.count) sounds-like")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                        .transition(.opacity)
-                }
-
-                if isHovered {
-                    Button {
-                        onDelete()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Delete term")
-                    .transition(.opacity)
-                }
-
-                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.tertiary)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                // Tap the row (outside the text field) to toggle; tapping
-                // inside the text field keeps focus there per standard
-                // SwiftUI hit-testing.
-                onToggle()
-            }
-
-            if isExpanded {
-                TextField(
-                    "Sounds like… (comma separated)",
-                    text: $aliasesDraft
-                )
+        HStack(spacing: 8) {
+            TextField("Term", text: $term.text)
                 .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12))
-                .onAppear { aliasesDraft = term.aliases.joined(separator: ", ") }
-                .onChange(of: aliasesDraft) { _, newValue in
-                    term.aliases = newValue
-                        .split(separator: ",")
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .filter { !$0.isEmpty }
+                .font(.system(size: 13, design: .monospaced))
+                .focused(focused, equals: term.id)
+
+            if let warning = warningMessage {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.orange)
+                    .help(warning)
+            }
+
+            if isHovered {
+                Button {
+                    onDelete()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .buttonStyle(.plain)
+                .help("Delete term")
+                .transition(.opacity)
             }
         }
         .padding(.vertical, 2)

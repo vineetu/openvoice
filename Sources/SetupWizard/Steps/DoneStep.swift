@@ -38,6 +38,7 @@ struct DoneStep: View {
                     .padding(.horizontal, 24)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .textSelection(.enabled)
 
             advancedHintCard
 
@@ -74,6 +75,7 @@ struct DoneStep: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .textSelection(.enabled)
         }
         .padding(12)
         .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 10))

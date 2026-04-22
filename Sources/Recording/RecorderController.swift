@@ -113,6 +113,20 @@ final class RecorderController: ObservableObject {
 
     // MARK: - Internals
 
+    /// Called on the successful-delivery site in `stopAndTranscribe()` —
+    /// i.e. a non-empty transcript has been handed off to the clipboard /
+    /// paste path and state is about to flip back to `.idle`. Increments
+    /// the donation-reminder counter used by `DonationLogic`.
+    ///
+    /// Deliberately **not** called on the error, cancel, or
+    /// `TranscriberError.audioTooShort` paths — those don't hand text to
+    /// the user, so counting them would inflate the milestone and ask
+    /// after a failure (spec §7 anti-pattern).
+    private func noteSuccessfulDelivery(text: String) {
+        guard !text.isEmpty else { return }
+        DonationStore.shared.incrementRecordingCount()
+    }
+
     private func scheduleAutoRecoveryIfNeeded() {
         autoRecoveryTask?.cancel()
         autoRecoveryTask = nil
@@ -169,6 +183,9 @@ final class RecorderController: ObservableObject {
         do {
             try await capture.start()
             state = .recording(startedAt: Date())
+        } catch AudioCaptureError.engineStartTimeout {
+            log.error("AudioCapture.start timed out — coreaudiod may be wedged")
+            state = .error(AudioCaptureError.engineStartTimeoutMessage)
         } catch {
             log.error("AudioCapture.start failed: \(String(describing: error))")
             state = .error("Could not start recording: \(error.localizedDescription)")
@@ -218,6 +235,7 @@ final class RecorderController: ObservableObject {
                         self.lastTranscript = transformed
                         self.lastAudioRecording = recording
                         self.lastResult = result
+                        self.noteSuccessfulDelivery(text: transformed)
                         self.state = .idle
                     } catch {
                         guard !Task.isCancelled else { return }
@@ -227,6 +245,7 @@ final class RecorderController: ObservableObject {
                         self.lastTranscript = rawText
                         self.lastAudioRecording = recording
                         self.lastResult = result
+                        self.noteSuccessfulDelivery(text: rawText)
                         self.state = .idle
                     }
                 }
@@ -235,6 +254,7 @@ final class RecorderController: ObservableObject {
                 lastTranscript = rawText
                 lastAudioRecording = recording
                 lastResult = result
+                noteSuccessfulDelivery(text: rawText)
                 state = .idle
             }
         } catch TranscriberError.modelMissing {

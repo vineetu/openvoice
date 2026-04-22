@@ -39,6 +39,7 @@ struct ModelStep: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
+            .textSelection(.enabled)
 
             VStack(spacing: 8) {
                 ForEach(ParakeetModelID.allCases, id: \.rawValue) { model in
@@ -121,6 +122,7 @@ struct ModelStep: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
 
             HStack(spacing: 10) {
                 if boostCached {
@@ -168,6 +170,7 @@ struct ModelStep: View {
                     isBoostDownloading = false
                 }
             } catch {
+                await ErrorLog.shared.error(component: "SetupWizard", message: "CTC boost model load failed", context: ["error": ErrorLog.redactedAppleError(error)])
                 await MainActor.run {
                     boostErrorMessage = error.localizedDescription
                     isBoostDownloading = false
@@ -219,6 +222,7 @@ struct ModelStep: View {
                     updateChrome()
                 }
             } catch {
+                await ErrorLog.shared.error(component: "SetupWizard", message: "Parakeet model download failed", context: ["modelID": model.rawValue, "error": ErrorLog.redactedAppleError(error)])
                 await MainActor.run {
                     isDownloading = false
                     errorMessage = "Download failed: \(error.localizedDescription)"

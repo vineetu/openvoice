@@ -728,6 +728,52 @@ extension HelpPane {
 
         CardSpec(
             section: .troubleshooting,
+            title: "Recording won't start?",
+            caption: "Symptom: you press the record hotkey and nothing happens — no pill, no audio captured. After ~5 seconds Jot surfaces \u{201C}Audio system isn\u{2019}t responding.\u{201D} Cause: macOS\u{2019}s audio daemon (coreaudiod) can get stuck after starting the iOS Simulator, a Bluetooth glitch, or a sleep/wake race. Jot can\u{2019}t unstick it without admin rights. Fix: open Terminal and run the command below. macOS will ask for your admin password, restart the daemon in a second, and the next hotkey press will work. Alternative: restart your Mac.",
+            anchor: "help.troubleshooting.audio-stuck",
+            tag: "coreaudiod"
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "waveform.slash")
+                        .font(.system(size: 22, weight: .medium))
+                        .foregroundStyle(.orange)
+                    Text("audio daemon stuck")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                InlineCode("sudo killall coreaudiod")
+            }
+        },
+
+        CardSpec(
+            section: .troubleshooting,
+            title: "Hotkey stopped working?",
+            caption: "Symptom: pressing ⌥, or ⌥/ produces a Unicode character (≤, ÷, …) instead of triggering the action. Cause: another app may have grabbed the shortcut while Jot was off — macOS silently prevents Jot from re-registering. Fix: 1) Click \u{201C}Restart Jot\u{201D} in Settings → General to re-register cleanly. 2) Still broken? Settings → Shortcuts, clear the binding for that row and reassign it. 3) Still broken? Identify the conflicting app (often Raycast, Alfred, Keyboard Maestro, TextExpander, or something recently installed/updated) — change the hotkey there or pick a different combo in Jot.",
+            anchor: "help.troubleshooting.hotkey-stuck",
+            tag: "re-register"
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    ShortcutChip(["⌥", ","])
+                    FlowArrow()
+                    Text("≤")
+                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.red)
+                }
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.accentColor)
+                    Text("Restart Jot")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        },
+
+        CardSpec(
+            section: .troubleshooting,
             title: "Resetting Jot",
             caption: "Three ways to start over, from your settings feeling off to wiping every byte Jot put on disk. Each relaunches Jot when you confirm.",
             tag: "3 scopes"

@@ -124,6 +124,7 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 - Launch at login
 - Recording retention — Forever / Last 7 / 30 / 90 days (default: 7 days)
 - Run setup wizard again (preloads current selections)
+- **Restart Jot** — a Troubleshooting row that quits and relaunches the app after a confirmation prompt, re-registering global shortcuts from scratch. Use when a hotkey suddenly produces a Unicode character (≤, ÷, …) instead of triggering its action, which happens when another app grabs the same shortcut while Jot is off.
 - **Reset group** — a dedicated section at the bottom of General with three tiered actions:
   - **Reset settings** — clears preferences, API keys, and shortcut bindings; keeps recordings and the downloaded model. Relaunches Jot.
   - **Erase all data** — destructive; wipes recordings, the transcription model (≈600 MB), and all settings. macOS permissions are untouched. Relaunches Jot.
