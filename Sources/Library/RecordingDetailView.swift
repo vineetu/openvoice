@@ -73,6 +73,7 @@ struct RecordingDetailView: View {
             }
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
+            .textSelection(.enabled)
         }
     }
 

@@ -48,6 +48,7 @@ struct ResetInfoPopover: View {
         }
         .padding(12)
         .frame(width: 280)
+        .textSelection(.enabled)
     }
 
     private func row(label: String, text: String) -> some View {

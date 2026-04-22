@@ -54,5 +54,6 @@ struct HelpSection<Content: View>: View {
             .padding(.top, 24)
         }
         .id(anchor)
+        .textSelection(.enabled)
     }
 }

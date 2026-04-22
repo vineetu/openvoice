@@ -12,8 +12,16 @@ public enum AudioCaptureError: Error, Sendable {
     case notRunning
     case converterUnavailable
     case engineStart(Error)
+    case engineStartTimeout
     case fileCreate(Error)
     case conversion(Error)
+
+    /// User-facing message shown when we detect the CoreAudio subsystem is
+    /// wedged. Callers that surface `engineStartTimeout` should show this
+    /// as-is (no "Could not start recording:" prefix) and leave the
+    /// follow-up instructions to the Help → Troubleshooting card.
+    public static let engineStartTimeoutMessage =
+        "Audio system isn't responding — see Help → Troubleshooting."
 }
 
 /// Owns the `AVAudioEngine` microphone tap for a single recording session.
@@ -68,7 +76,7 @@ public actor AudioCapture {
 
     // MARK: - Start / Stop
 
-    public func start() throws {
+    public func start() async throws {
         guard engine == nil else { throw AudioCaptureError.alreadyRunning }
 
         try FileManager.default.createDirectory(
@@ -77,95 +85,185 @@ public actor AudioCapture {
         )
 
         let url = recordingsDirectory.appendingPathComponent("\(UUID().uuidString).wav")
-
-        let engine = AVAudioEngine()
-
-        // Pin the input to the user's chosen device BEFORE reading the
-        // hardware format and installing the tap. On macOS, AVAudioEngine
-        // otherwise follows the system default — so a user who selected
-        // "USB mic" in Settings would silently record from the built-in
-        // mic whenever macOS rerouted. The stored UID comes from
-        // `jot.inputDeviceUID` (see Settings → General). Empty string
-        // means "system default" — skip pinning.
         let selectedUID = UserDefaults.standard.string(forKey: "jot.inputDeviceUID") ?? ""
-        if !selectedUID.isEmpty {
-            if let deviceID = Self.audioDeviceID(forUID: selectedUID) {
-                do {
-                    try engine.inputNode.auAudioUnit.setDeviceID(AUAudioObjectID(deviceID))
-                    engine.reset()
-                    log.info("Pinned input to device UID=\(selectedUID, privacy: .public) id=\(deviceID)")
-                } catch {
-                    log.error("setDeviceID failed for UID=\(selectedUID, privacy: .public): \(error.localizedDescription). Falling back to system default.")
-                }
-            } else {
-                log.error("No CoreAudio device found for UID=\(selectedUID, privacy: .public). Falling back to system default.")
-            }
-        }
+        let publisher = self.amplitudePublisher
 
-        let input = engine.inputNode
-        let hardwareFormat = input.outputFormat(forBus: 0)
-
-        let file: AVAudioFile
+        let setup: EngineSetup
         do {
-            // Persist at the post-conversion format so the file on disk is
-            // already what Parakeet wants — no second conversion step when
-            // we re-transcribe later.
-            file = try AVAudioFile(
-                forWriting: url,
-                settings: AudioFormat.target.settings,
-                commonFormat: .pcmFormatFloat32,
-                interleaved: false
+            setup = try await Self.configureEngineWithTimeout(
+                capture: self,
+                amplitudePublisher: publisher,
+                selectedUID: selectedUID,
+                url: url,
+                seconds: 5
             )
         } catch {
-            throw AudioCaptureError.fileCreate(error)
+            try? FileManager.default.removeItem(at: url)
+            switch error {
+            case AudioCaptureError.engineStartTimeout:
+                Task { await ErrorLog.shared.error(component: "AudioCapture", message: "Audio engine setup timed out (>5s) — coreaudiod may be stuck; see Help → Troubleshooting") }
+            case AudioCaptureError.engineStart(let inner):
+                Task { await ErrorLog.shared.error(component: "AudioCapture", message: "AVAudioEngine.start failed", context: ["error": ErrorLog.redactedAppleError(inner)]) }
+            case AudioCaptureError.fileCreate(let inner):
+                Task { await ErrorLog.shared.error(component: "AudioCapture", message: "Recording file create failed", context: ["error": ErrorLog.redactedAppleError(inner)]) }
+            case AudioCaptureError.converterUnavailable:
+                Task { await ErrorLog.shared.error(component: "AudioCapture", message: "AVAudioConverter unavailable") }
+            default:
+                Task { await ErrorLog.shared.error(component: "AudioCapture", message: "Audio engine setup failed", context: ["error": ErrorLog.redactedAppleError(error)]) }
+            }
+            throw error
         }
 
-        guard let converter = Self.makeConverter(from: hardwareFormat) else {
-            throw AudioCaptureError.converterUnavailable
-        }
-
-        self.engine = engine
-        self.converter = converter
-        self.converterInputFormat = hardwareFormat
-        self.audioFile = file
+        self.engine = setup.engine
+        self.converter = setup.converter
+        self.converterInputFormat = setup.hardwareFormat
+        self.audioFile = setup.file
         self.fileURL = url
         self.samples = []
         self.startedAt = Date()
+    }
 
-        // Tap buffer size: 4096 frames is a good middle ground — small enough
-        // to keep latency low, large enough to avoid tap overhead dominating.
-        input.installTap(onBus: 0, bufferSize: 4096, format: hardwareFormat) { [weak self] buffer, _ in
-            guard let self else { return }
-            // LOAD-BEARING: RMS must be computed from the PRE-CONVERTER hardware-rate
-            // buffer here. Moving this computation after the AVAudioConverter step
-            // (in `append(_:)`) drops update cadence from ~11 Hz to ~3.9 Hz and the
-            // waveform will visibly stutter. Do not move.
-            let level = AmplitudePublisher.rms(from: buffer)
-            let publisher = self.amplitudePublisher
-            Task { @MainActor [weak publisher] in
-                publisher?.append(rms: level)
-            }
-            // Copy the buffer payload out of the audio thread before hopping
-            // into the actor. `AVAudioPCMBuffer` is reference-type and the
-            // engine reuses the underlying storage, so a snapshot is
-            // mandatory to avoid reading overwritten frames.
-            guard let snapshot = buffer.copy() as? AVAudioPCMBuffer else { return }
-            Task {
-                await self.append(snapshot)
-            }
-        }
+    /// Bundle of engine + file + converter handed back from the
+    /// background-queue setup closure. Marked `@unchecked Sendable` because
+    /// the AVFoundation types are already treated as sendable via the
+    /// `@preconcurrency` import at the top of the file, and the struct only
+    /// crosses thread boundaries once (BG setup → actor).
+    private struct EngineSetup: @unchecked Sendable {
+        let engine: AVAudioEngine
+        let file: AVAudioFile
+        let converter: AVAudioConverter
+        let hardwareFormat: AVAudioFormat
+    }
 
-        do {
-            engine.prepare()
-            try engine.start()
-        } catch {
-            input.removeTap(onBus: 0)
-            self.engine = nil
-            self.converter = nil
-            self.audioFile = nil
-            self.fileURL = nil
-            try? FileManager.default.removeItem(at: url)
-            throw AudioCaptureError.engineStart(error)
+    /// Runs the entire CoreAudio-touching setup sequence on a background
+    /// GCD queue under a single timeout. On macOS, the following
+    /// synchronous calls can each block indefinitely when `coreaudiod` is
+    /// wedged (e.g. iOS Simulator holding audio hardware, Bluetooth glitch,
+    /// sleep/wake race):
+    ///   - `AudioObjectGetPropertyData{Size}` (HAL device enumeration when pinning)
+    ///   - `engine.inputNode.auAudioUnit.setDeviceID(...)` (when pinning)
+    ///   - `engine.inputNode` access (resolves default input)
+    ///   - `input.outputFormat(forBus: 0)` (queries hardware format)
+    ///   - `input.installTap(...)` (touches device)
+    ///   - `engine.prepare()` + `engine.start()`
+    ///
+    /// The prior implementation only wrapped `prepare()` + `start()`, so a
+    /// wedged `coreaudiod` would block `engine.inputNode` before the
+    /// timeout had a chance to fire — locking up the `AudioCapture` actor's
+    /// executor thread forever. Widening coverage to the full sequence
+    /// ensures the caller always sees either a clean success or a clean
+    /// `engineStartTimeout` after `seconds` elapsed.
+    ///
+    /// On timeout we abandon the engine reference. The background thread
+    /// eventually unblocks (when the user runs `sudo killall coreaudiod` or
+    /// restarts), and the orphan is reclaimed when its refcount drops to
+    /// zero. File creation and `makeConverter` live inside the closure too
+    /// so the actor owns nothing if setup fails.
+    private static func configureEngineWithTimeout(
+        capture: AudioCapture,
+        amplitudePublisher: AmplitudePublisher?,
+        selectedUID: String,
+        url: URL,
+        seconds: Double
+    ) async throws -> EngineSetup {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<EngineSetup, Error>) in
+            let lock = NSLock()
+            var hasResumed = false
+            func resumeOnce(_ result: Result<EngineSetup, Error>) {
+                lock.lock(); defer { lock.unlock() }
+                guard !hasResumed else { return }
+                hasResumed = true
+                switch result {
+                case .success(let v): cont.resume(returning: v)
+                case .failure(let e): cont.resume(throwing: e)
+                }
+            }
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                let engine = AVAudioEngine()
+
+                // Pin the input to the user's chosen device BEFORE reading the
+                // hardware format and installing the tap. On macOS, AVAudioEngine
+                // otherwise follows the system default. Empty UID means "system
+                // default" — skip pinning.
+                if !selectedUID.isEmpty {
+                    if let deviceID = AudioCapture.audioDeviceID(forUID: selectedUID) {
+                        do {
+                            try engine.inputNode.auAudioUnit.setDeviceID(AUAudioObjectID(deviceID))
+                            engine.reset()
+                        } catch {
+                            Task { await ErrorLog.shared.warn(component: "AudioCapture", message: "Input device pin failed, falling back to default", context: ["error": ErrorLog.redactedAppleError(error)]) }
+                        }
+                    } else {
+                        Task { await ErrorLog.shared.warn(component: "AudioCapture", message: "Selected input UID not present, falling back to default") }
+                    }
+                }
+
+                let input = engine.inputNode
+                let hardwareFormat = input.outputFormat(forBus: 0)
+
+                // Persist at the post-conversion format so the file on disk is
+                // already what Parakeet wants — no second conversion step when
+                // we re-transcribe later.
+                let file: AVAudioFile
+                do {
+                    file = try AVAudioFile(
+                        forWriting: url,
+                        settings: AudioFormat.target.settings,
+                        commonFormat: .pcmFormatFloat32,
+                        interleaved: false
+                    )
+                } catch {
+                    resumeOnce(.failure(AudioCaptureError.fileCreate(error)))
+                    return
+                }
+
+                guard let converter = AudioCapture.makeConverter(from: hardwareFormat) else {
+                    resumeOnce(.failure(AudioCaptureError.converterUnavailable))
+                    return
+                }
+
+                // Tap buffer size: 4096 frames is a good middle ground — small
+                // enough to keep latency low, large enough to avoid tap overhead
+                // dominating.
+                input.installTap(onBus: 0, bufferSize: 4096, format: hardwareFormat) { [weak capture, weak amplitudePublisher] buffer, _ in
+                    // LOAD-BEARING: RMS must be computed from the PRE-CONVERTER
+                    // hardware-rate buffer here. Moving this computation after
+                    // the AVAudioConverter step (in `append(_:)`) drops update
+                    // cadence from ~11 Hz to ~3.9 Hz and the waveform will
+                    // visibly stutter. Do not move.
+                    let level = AmplitudePublisher.rms(from: buffer)
+                    Task { @MainActor [weak amplitudePublisher] in
+                        amplitudePublisher?.append(rms: level)
+                    }
+                    // Copy the buffer payload out of the audio thread before
+                    // hopping into the actor. `AVAudioPCMBuffer` is reference-
+                    // type and the engine reuses the underlying storage, so a
+                    // snapshot is mandatory to avoid reading overwritten frames.
+                    guard let snapshot = buffer.copy() as? AVAudioPCMBuffer else { return }
+                    Task { [weak capture] in
+                        await capture?.append(snapshot)
+                    }
+                }
+
+                do {
+                    engine.prepare()
+                    try engine.start()
+                    resumeOnce(.success(EngineSetup(
+                        engine: engine,
+                        file: file,
+                        converter: converter,
+                        hardwareFormat: hardwareFormat
+                    )))
+                } catch {
+                    input.removeTap(onBus: 0)
+                    resumeOnce(.failure(AudioCaptureError.engineStart(error)))
+                }
+            }
+
+            DispatchQueue.global().asyncAfter(deadline: .now() + seconds) {
+                resumeOnce(.failure(AudioCaptureError.engineStartTimeout))
+            }
         }
     }
 

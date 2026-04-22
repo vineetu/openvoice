@@ -14,6 +14,15 @@ struct AboutPane: View {
     @State private var viewerText = ""
     @State private var isShowingLogViewer = false
 
+    /// Donation state lives here so the "Thanks for donating" line and the
+    /// "N months saved" badge update without relaunching the window.
+    @ObservedObject private var donationStore = DonationStore.shared
+
+    /// Comparable-tools monthly rate used by `SavingsBadge`. Spec §7.6
+    /// pins this at $10/mo; keep it wired to a local constant so there's
+    /// one place to update it if competitor pricing shifts.
+    private let comparableMonthlyRate = 10
+
     var body: some View {
         Form {
             identitySection
@@ -41,11 +50,22 @@ struct AboutPane: View {
                         .keyboardShortcut(.defaultAction)
                 }
                 .padding(.bottom, 10)
-                TextEditor(text: $viewerText).font(.system(.body, design: .monospaced))
-                    .disabled(true)
+                ScrollView {
+                    Text(viewerText.isEmpty ? "(log is empty)" : viewerText)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                }
+                .background(Color(nsColor: .textBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+                )
             }
             .padding()
             .frame(minWidth: 700, minHeight: 480)
+            .onAppear { viewerText = logText(useRedacted: false) }
         }
     }
 
@@ -93,6 +113,7 @@ struct AboutPane: View {
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, 2)
+                .textSelection(.enabled)
         }
     }
 
@@ -100,10 +121,17 @@ struct AboutPane: View {
 
     private var donationSection: some View {
         Section("Support") {
-            Text("Jot is free. If you'd like to support it, please donate to charity through my every.org fund instead of paying me — 100% goes to causes I've personally vetted.")
+            // Honesty constraint (spec §3 + donation-reminder author note):
+            // the developer has NOT personally vetted every cause inside the
+            // every.org fund, and we don't know the fee split, so we don't
+            // claim "100% goes to causes" or "personally vetted" anywhere.
+            // The only true, one-sentence claim is that the fund supports
+            // education.
+            Text("Jot is free. If you'd like to support it, please donate to charity through my every.org fund that supports education instead of paying me.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
 
             HStack(spacing: 10) {
                 Link(destination: URL(string: "https://www.every.org/@vineet.sriram")!) {
@@ -121,7 +149,39 @@ struct AboutPane: View {
                 Spacer()
             }
             .padding(.vertical, 2)
+
+            // Donation acknowledgment: shown only after the user has
+            // clicked a donate link from the Home card or the button
+            // above (state transitions to `.donated(Date())`). Quiet
+            // one-liner — not a celebration (spec §6.7).
+            if case .donated(let date) = donationStore.state {
+                DonationAcknowledgment(date: date)
+                    .padding(.top, 2)
+            }
+
+            // Savings badge: "You've been using Jot for N months — about
+            // $X saved vs $10/mo tools." Gated on months >= 1 so day-one
+            // users don't see "$0 saved", and on the reminder toggle so
+            // opting out hides both the Home card AND this line (one
+            // switch, two surfaces — spec §7.6).
+            let months = monthsSinceInstall
+            if months >= 1 && donationStore.reminderEnabled {
+                SavingsBadge(months: months, monthlyRate: comparableMonthlyRate)
+                    .padding(.top, 2)
+            }
         }
+    }
+
+    /// Whole months elapsed since `firstLaunchDate`, rounded DOWN (spec
+    /// §7.6 — under-promise). A negative value (clock skew) is clamped
+    /// to 0 so a badly-set clock never shows a weird "-3 months".
+    private var monthsSinceInstall: Int {
+        let comps = Calendar.current.dateComponents(
+            [.month],
+            from: donationStore.firstLaunchDate,
+            to: Date()
+        )
+        return max(comps.month ?? 0, 0)
     }
 
     // MARK: - Privacy
@@ -133,6 +193,7 @@ struct AboutPane: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, 2)
+                .textSelection(.enabled)
         }
     }
 
@@ -142,10 +203,11 @@ struct AboutPane: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
             HStack(spacing: 10) {
-                Button("View log") { viewerText = logText(useRedacted: false); isShowingLogViewer = true }
-                Button("Copy log") { pendingShareAction = .copy }
-                Button("Reveal in Finder") { pendingShareAction = .reveal }
+                Button("View log") { isShowingLogViewer = true }
+                Button("Copy log") { LogSharing.copyToClipboard(logText(useRedacted: false)) }
+                Button("Reveal in Finder") { LogSharing.revealInFinder(ErrorLog.logFileURL) }
                 Button("Send via email") { pendingShareAction = .email }
                     .buttonStyle(.borderedProminent)
                 Spacer()
@@ -153,6 +215,7 @@ struct AboutPane: View {
             Text("Send to: jottranscribe@gmail.com")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
         }
     }
 
@@ -188,10 +251,13 @@ struct AboutPane: View {
     private func logText(useRedacted: Bool) -> String {
         let raw = (try? String(contentsOf: ErrorLog.logFileURL, encoding: .utf8)) ?? ""
         guard useRedacted else { return raw }
+        let config = LLMConfiguration.shared
+        let keys = LLMConfiguration.bucketedProviders.map { config.apiKey(for: $0) }
+        let baseURLs = LLMConfiguration.bucketedProviders.map { config.baseURL(for: $0) }
         let results = PrivacyScanner.scan(
             logContents: raw,
-            currentAPIKey: LLMConfiguration.shared.apiKey,
-            customBaseURL: UserDefaults.standard.string(forKey: "jot.llm.baseURL"),
+            currentAPIKeys: keys,
+            customBaseURLs: baseURLs,
             knownTranscripts: recentTranscripts(),
             homeDirectory: NSHomeDirectory()
         )

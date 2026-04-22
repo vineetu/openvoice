@@ -64,6 +64,7 @@ struct Callout<Content: View>: View {
                     .font(.system(size: 13))
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
             }
         }
         .padding(16)

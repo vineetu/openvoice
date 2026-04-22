@@ -198,8 +198,10 @@ actor AppleIntelligenceClient {
             }
             return text
         } catch let error as LLMError {
+            Task { await ErrorLog.shared.error(component: "AppleIntelligence", message: "FoundationModels session failed", context: ["error": String(describing: error).prefix(80).description]) }
             throw error
         } catch {
+            Task { await ErrorLog.shared.error(component: "AppleIntelligence", message: "FoundationModels session failed", context: ["error": ErrorLog.redactedAppleError(error)]) }
             throw LLMError.appleIntelligenceFailure(error.localizedDescription)
         }
     }

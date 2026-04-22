@@ -41,6 +41,7 @@ final class RecordingPersister {
     private func persist(result: TranscriptionResult) {
         guard let audio = recorder.lastAudioRecording else {
             log.warning("lastResult fired without a paired lastAudioRecording; skipping persistence")
+            Task { await ErrorLog.shared.warn(component: "RecordingPersister", message: "lastResult fired without a paired lastAudioRecording") }
             return
         }
 
@@ -59,6 +60,7 @@ final class RecordingPersister {
             try context.save()
         } catch {
             log.error("Failed to save Recording: \(String(describing: error))")
+            Task { await ErrorLog.shared.error(component: "RecordingPersister", message: "SwiftData save failed", context: ["error": ErrorLog.redactedAppleError(error)]) }
         }
     }
 }

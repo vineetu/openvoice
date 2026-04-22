@@ -70,6 +70,7 @@ struct FeatureCard<Visual: View>: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)

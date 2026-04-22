@@ -88,6 +88,7 @@ final class DeliveryService: ObservableObject {
 
         guard ClipboardSandwich.writeString(text, pasteboard: pasteboard) else {
             log.error("pasteboard.setString failed")
+            Task { await ErrorLog.shared.error(component: "Delivery", message: "Clipboard write failed") }
             ClipboardSandwich.restore(snapshot, pasteboard: pasteboard)
             publish(.failed(error: "clipboard write failed"))
             return
@@ -101,6 +102,7 @@ final class DeliveryService: ObservableObject {
             }
         } catch {
             log.error("CGEventPost failed: \(String(describing: error))")
+            Task { await ErrorLog.shared.error(component: "Delivery", message: "Synthetic paste (⌘V) failed", context: ["error": ErrorLog.redactedAppleError(error)]) }
             ClipboardSandwich.restore(snapshot, pasteboard: pasteboard)
             publish(.failed(error: "could not post ⌘V: \(error)"))
             return
@@ -130,6 +132,7 @@ final class DeliveryService: ObservableObject {
             publish(.clipboardOnly(text: text, reason: reason))
         } else {
             log.error("pasteboard.setString failed in clipboard-only path")
+            Task { await ErrorLog.shared.error(component: "Delivery", message: "Clipboard-only write failed", context: ["reason": String(reason.prefix(80))]) }
             publish(.failed(error: "clipboard write failed"))
         }
     }

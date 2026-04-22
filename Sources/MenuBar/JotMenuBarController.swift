@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import SwiftData
 import os.log
 
 /// Owns the `NSStatusItem` (menu-bar extra) and its `NSMenu`. The icon and
@@ -16,6 +17,9 @@ final class JotMenuBarController: NSObject {
 
     private let recorder: RecorderController
     private let delivery: DeliveryService
+    /// Context for the SwiftData store, used by the "Recent Transcriptions"
+    /// submenu to fetch the 10 most recent `Recording` rows on demand.
+    private let modelContext: ModelContext
 
     private static let menuBarIconName = NSImage.Name("JotMenuIcon")
 
@@ -33,6 +37,7 @@ final class JotMenuBarController: NSObject {
 
     private var statusItem: NSStatusItem?
     private let menu = NSMenu()
+    private let recentSubmenu = NSMenu()
 
     private var toggleItem: NSMenuItem?
     private var copyLastItem: NSMenuItem?
@@ -46,9 +51,10 @@ final class JotMenuBarController: NSObject {
 
     // MARK: - Init
 
-    init(recorder: RecorderController, delivery: DeliveryService) {
+    init(recorder: RecorderController, delivery: DeliveryService, modelContext: ModelContext) {
         self.recorder = recorder
         self.delivery = delivery
+        self.modelContext = modelContext
         super.init()
     }
 
@@ -103,6 +109,21 @@ final class JotMenuBarController: NSObject {
         menu.addItem(copyLast)
         copyLastItem = copyLast
 
+        // Recent Transcriptions submenu — 10 most recent recordings, each
+        // clickable to copy its transcript. Contents are rebuilt lazily in
+        // `menuNeedsUpdate(_:)` (delegate-driven), so freshly-added
+        // recordings show up the next time the user opens the submenu
+        // without us having to subscribe to SwiftData change notifications.
+        recentSubmenu.delegate = self
+        recentSubmenu.autoenablesItems = false
+        let recent = NSMenuItem(
+            title: "Recent Transcriptions",
+            action: nil,
+            keyEquivalent: ""
+        )
+        recent.submenu = recentSubmenu
+        menu.addItem(recent)
+
         let showWindow = NSMenuItem(
             title: "Open Jot…",
             action: #selector(showMainWindow),
@@ -121,14 +142,6 @@ final class JotMenuBarController: NSObject {
         checkUpdates.target = self
         menu.addItem(checkUpdates)
 
-        let settings = NSMenuItem(
-            title: "Settings…",
-            action: #selector(openSettings),
-            keyEquivalent: ","
-        )
-        settings.target = self
-        menu.addItem(settings)
-
         let quit = NSMenuItem(
             title: "Quit Jot",
             action: #selector(quitApp),
@@ -139,6 +152,78 @@ final class JotMenuBarController: NSObject {
 
         return menu
     }
+
+    // MARK: - Recent Transcriptions submenu
+
+    private func populateRecentSubmenu() {
+        recentSubmenu.removeAllItems()
+
+        let recordings = fetchRecentRecordings(limit: 10)
+        guard !recordings.isEmpty else {
+            let empty = NSMenuItem(title: "No recordings yet", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            recentSubmenu.addItem(empty)
+            return
+        }
+
+        for recording in recordings {
+            let item = NSMenuItem(
+                title: Self.previewTitle(for: recording),
+                action: #selector(copyRecordingTranscript(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            // `representedObject` carries the UUID across into the click
+            // handler; re-fetching by id avoids holding a SwiftData model
+            // reference across the menu's lifecycle.
+            item.representedObject = recording.id
+            recentSubmenu.addItem(item)
+        }
+
+        recentSubmenu.addItem(.separator())
+        let showAll = NSMenuItem(
+            title: "Show All Recordings…",
+            action: #selector(showLibrary),
+            keyEquivalent: ""
+        )
+        showAll.target = self
+        recentSubmenu.addItem(showAll)
+    }
+
+    private func fetchRecentRecordings(limit: Int) -> [Recording] {
+        var descriptor = FetchDescriptor<Recording>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = limit
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    /// Compact one-line preview: "2 min ago · first 60 chars of transcript…".
+    /// `RelativeDateTimeFormatter` handles the localized "X ago" phrasing.
+    private static func previewTitle(for recording: Recording) -> String {
+        let relative = relativeFormatter.localizedString(
+            for: recording.createdAt,
+            relativeTo: .now
+        )
+        let rawPreview = recording.transcript
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview: String
+        if rawPreview.isEmpty {
+            preview = "(empty)"
+        } else if rawPreview.count > 60 {
+            preview = String(rawPreview.prefix(60)) + "…"
+        } else {
+            preview = rawPreview
+        }
+        return "\(relative) · \(preview)"
+    }
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f
+    }()
 
     // MARK: - State reflection
 
@@ -295,11 +380,42 @@ final class JotMenuBarController: NSObject {
         delegate.updaterController.checkForUpdates(nil)
     }
 
-    @objc private func openSettings() {
-        openUnifiedWindow(selection: .settings(.general))
+    @objc private func showLibrary() {
+        openUnifiedWindow(selection: .library)
+    }
+
+    /// Menu-item click handler for a row inside the Recent Transcriptions
+    /// submenu. Pulls the `UUID` from `representedObject`, re-fetches the
+    /// Recording from SwiftData (fresh text even if edited inside the
+    /// Library), and copies the transcript to the clipboard.
+    @objc private func copyRecordingTranscript(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        var descriptor = FetchDescriptor<Recording>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        guard let recording = (try? modelContext.fetch(descriptor))?.first else { return }
+        let text = recording.transcript
+        guard !text.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
     }
 
     @objc private func quitApp() {
         NSApp.terminate(nil)
+    }
+}
+
+// MARK: - NSMenuDelegate
+
+extension JotMenuBarController: NSMenuDelegate {
+    /// Called by AppKit immediately before the menu is displayed. We only
+    /// rebuild the `recentSubmenu` contents here — other menus have static
+    /// shape and are built once in `buildMenu()`.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === recentSubmenu {
+            populateRecentSubmenu()
+        }
     }
 }

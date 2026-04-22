@@ -44,6 +44,7 @@ struct SoundPane: View {
                 Text("Applies to all Jot chimes.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
         }
         .formStyle(.grouped)

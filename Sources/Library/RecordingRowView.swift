@@ -73,6 +73,7 @@ struct RecordingRowView: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .truncationMode(.tail)
+            .textSelection(.enabled)
     }
 
     private func beginEditTitle() {

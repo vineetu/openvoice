@@ -34,6 +34,7 @@ struct WelcomeStep: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .textSelection(.enabled)
         .onAppear {
             coordinator.setChrome(WizardStepChrome(
                 primaryTitle: "Continue",

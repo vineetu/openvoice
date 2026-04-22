@@ -129,6 +129,7 @@ final class PermissionsService: ObservableObject {
     private func requestInputMonitoring() {
         let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
         if !granted {
+            Task { await ErrorLog.shared.warn(component: "Permissions", message: "Input Monitoring not granted at request time") }
             SystemSettingsLinks.open(for: .inputMonitoring)
         }
     }
@@ -136,5 +137,8 @@ final class PermissionsService: ObservableObject {
     private func requestMicrophone() async {
         let granted = await AVCaptureDevice.requestAccess(for: .audio)
         log.info("Microphone request result: \(granted, privacy: .public)")
+        if !granted {
+            await ErrorLog.shared.warn(component: "Permissions", message: "Microphone access denied at request")
+        }
     }
 }

@@ -59,6 +59,7 @@ final class RetentionService {
             expired = try context.fetch(descriptor)
         } catch {
             log.error("Retention fetch failed: \(String(describing: error), privacy: .public)")
+            Task { await ErrorLog.shared.error(component: "RetentionService", message: "Retention fetch failed", context: ["error": ErrorLog.redactedAppleError(error)]) }
             return
         }
 
@@ -74,6 +75,7 @@ final class RetentionService {
             log.info("Retention purge: \(expired.count) recording(s) older than \(days)d removed")
         } catch {
             log.error("Retention save failed: \(String(describing: error), privacy: .public)")
+            Task { await ErrorLog.shared.error(component: "RetentionService", message: "Retention save failed", context: ["error": ErrorLog.redactedAppleError(error), "expired": String(expired.count)]) }
         }
     }
 }

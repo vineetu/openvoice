@@ -23,6 +23,12 @@ struct HomePane: View {
 
     @Environment(\.setSidebarSelection) private var setSidebarSelection
 
+    /// Donation reminder card state. Observed so dismissal collapses the
+    /// card immediately — the card's `markDismissedSoft` /
+    /// `markDismissedForever` mutations flip `@Published state`, which
+    /// re-evaluates `shouldShowDonationCard(...)` in the body.
+    @ObservedObject private var donationStore = DonationStore.shared
+
     /// Force the glance HStack to re-read the live shortcut whenever the
     /// user rebinds it — `KeyboardShortcuts` itself posts no change
     /// notification we can bind to, so we observe the change via a
@@ -42,6 +48,18 @@ struct HomePane: View {
                 if !recentRows.isEmpty {
                     recentSection
                         .padding(.horizontal, 20)
+                }
+
+                if shouldShowDonationCard(
+                    state: donationStore.state,
+                    count: donationStore.recordingCount,
+                    firstLaunchDate: donationStore.firstLaunchDate,
+                    reminderEnabled: donationStore.reminderEnabled,
+                    now: Date()
+                ) {
+                    DonationCard()
+                        .padding(.horizontal, 20)
+                        .transition(.opacity)
                 }
 
                 Spacer(minLength: 0)

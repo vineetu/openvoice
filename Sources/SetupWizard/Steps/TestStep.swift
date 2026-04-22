@@ -28,6 +28,7 @@ struct TestStep: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
+            .textSelection(.enabled)
 
             remediationBanner
 
@@ -159,6 +160,7 @@ struct TestStep: View {
                     phase = .done
                 }
             } catch {
+                await ErrorLog.shared.error(component: "SetupWizard", message: "Wizard test capture/transcribe failed", context: ["error": ErrorLog.redactedAppleError(error)])
                 await MainActor.run {
                     errorMessage = "Test failed: \(error.localizedDescription)"
                     phase = .failed

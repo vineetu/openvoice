@@ -13,6 +13,7 @@ struct ShortcutsStep: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
+            .textSelection(.enabled)
 
             HStack(alignment: .center, spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -21,6 +22,7 @@ struct ShortcutsStep: View {
                     Text("Default is ⌥Space. Change it here if it clashes with another app.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
                 Spacer()
                 KeyboardShortcuts.Recorder(for: .toggleRecording)
@@ -39,6 +41,7 @@ struct ShortcutsStep: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
 
             Spacer(minLength: 0)
         }

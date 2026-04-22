@@ -127,6 +127,7 @@ final class ArticulateController: ObservableObject {
         permissions.refreshAll()
 
         guard permissions.statuses[.accessibilityPostEvents] == .granted else {
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Accessibility not granted (fixed)", context: ["flow": "fixed"]) }
             state = .error("Grant Accessibility in System Settings for Articulate.")
             return
         }
@@ -136,9 +137,11 @@ final class ArticulateController: ObservableObject {
         do {
             selectedText = try await captureSelection()
         } catch let error as ArticulateError {
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Selection capture failed (fixed)", context: ["reason": String(error.message.prefix(80))]) }
             state = .error(error.message)
             return
         } catch {
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Selection capture failed (fixed)", context: ["error": ErrorLog.redactedAppleError(error)]) }
             state = .error(error.localizedDescription)
             return
         }
@@ -153,6 +156,7 @@ final class ArticulateController: ObservableObject {
             )
         } catch {
             log.error("LLM articulate (fixed) failed: \(String(describing: error))")
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "LLM articulate failed (fixed)", context: ["error": ErrorLog.redactedAppleError(error)]) }
             state = .error("Articulate failed: \(error.localizedDescription)")
             return
         }
@@ -169,11 +173,13 @@ final class ArticulateController: ObservableObject {
         permissions.refreshAll()
 
         guard permissions.statuses[.accessibilityPostEvents] == .granted else {
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Accessibility not granted (custom)", context: ["flow": "custom"]) }
             state = .error("Grant Accessibility in System Settings for Articulate.")
             return
         }
 
         guard permissions.statuses[.microphone] == .granted else {
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Microphone not granted (custom)", context: ["flow": "custom"]) }
             state = .error("Microphone permission is required.")
             return
         }
@@ -183,9 +189,11 @@ final class ArticulateController: ObservableObject {
         do {
             selectedText = try await captureSelection()
         } catch let error as ArticulateError {
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Selection capture failed (custom)", context: ["reason": String(error.message.prefix(80))]) }
             state = .error(error.message)
             return
         } catch {
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Selection capture failed (custom)", context: ["error": ErrorLog.redactedAppleError(error)]) }
             state = .error(error.localizedDescription)
             return
         }
@@ -196,8 +204,13 @@ final class ArticulateController: ObservableObject {
             runningTask = Task { @MainActor [weak self] in
                 await self?.waitForToggle(selectedText: selectedText)
             }
+        } catch AudioCaptureError.engineStartTimeout {
+            log.error("AudioCapture.start timed out — coreaudiod may be wedged")
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Audio engine setup timed out (>5s) — coreaudiod may be stuck; see Help → Troubleshooting") }
+            state = .error(AudioCaptureError.engineStartTimeoutMessage)
         } catch {
             log.error("AudioCapture.start failed: \(String(describing: error))")
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "AudioCapture.start failed (custom)", context: ["error": ErrorLog.redactedAppleError(error)]) }
             state = .error("Could not start recording: \(error.localizedDescription)")
         }
     }
@@ -214,6 +227,7 @@ final class ArticulateController: ObservableObject {
 
     private func stopAndProcess() async {
         guard let selectedText = capturedSelectedText else {
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "No captured text on stop", context: ["flow": "custom"]) }
             state = .error("No captured text available.")
             return
         }
@@ -226,6 +240,7 @@ final class ArticulateController: ObservableObject {
             recording = try await capture.stop()
         } catch {
             log.error("AudioCapture.stop failed: \(String(describing: error))")
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "AudioCapture.stop failed (custom)", context: ["error": ErrorLog.redactedAppleError(error)]) }
             state = .error("Recording stop failed: \(error.localizedDescription)")
             return
         }
@@ -237,18 +252,22 @@ final class ArticulateController: ObservableObject {
             let result = try await transcriber.transcribe(recording.samples)
             instruction = result.text
         } catch TranscriberError.audioTooShort {
+            Task { await ErrorLog.shared.warn(component: "Articulate", message: "Instruction audio too short", context: ["flow": "custom"]) }
             state = .error(shortRecordingMessage(for: recording))
             return
         } catch TranscriberError.busy {
+            Task { await ErrorLog.shared.warn(component: "Articulate", message: "Transcriber busy", context: ["flow": "custom"]) }
             state = .error("Another transcription is already running.")
             return
         } catch {
             log.error("Transcription failed: \(String(describing: error))")
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Instruction transcription failed", context: ["error": ErrorLog.redactedAppleError(error)]) }
             state = .error("Transcription failed: \(error.localizedDescription)")
             return
         }
 
         guard !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            Task { await ErrorLog.shared.warn(component: "Articulate", message: "Empty instruction after transcription", context: ["flow": "custom"]) }
             state = .error("Could not understand the instruction.")
             return
         }
@@ -259,6 +278,7 @@ final class ArticulateController: ObservableObject {
             rewritten = try await llm.articulate(selectedText: selectedText, instruction: instruction)
         } catch {
             log.error("LLM articulate failed: \(String(describing: error))")
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "LLM articulate failed (custom)", context: ["error": ErrorLog.redactedAppleError(error)]) }
             state = .error("Articulate failed: \(error.localizedDescription)")
             return
         }
@@ -316,6 +336,7 @@ final class ArticulateController: ObservableObject {
         let snapshot = ClipboardSandwich.snapshot()
         guard ClipboardSandwich.writeString(rewritten) else {
             ClipboardSandwich.restore(snapshot)
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Clipboard write failed") }
             state = .error("Clipboard write failed.")
             return false
         }
@@ -324,6 +345,7 @@ final class ArticulateController: ObservableObject {
             try ClipboardSandwich.postCommandV()
         } catch {
             ClipboardSandwich.restore(snapshot)
+            Task { await ErrorLog.shared.error(component: "Articulate", message: "Synthetic paste failed", context: ["error": ErrorLog.redactedAppleError(error)]) }
             state = .error("Could not paste articulated text: \(error.localizedDescription)")
             return false
         }

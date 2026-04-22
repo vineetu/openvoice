@@ -46,3 +46,6 @@ docs/task-breakdown-phase1.md
 
 # Pre-flight spike packages (standalone tests)
 Spikes/
+
+# iOS work-in-progress — not ready to ship, committed in a later release
+iOS/

@@ -90,6 +90,7 @@ struct TranscriptionPane: View {
                     Text("Requires Automatically paste transcription.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
             }
 
@@ -135,6 +136,7 @@ struct TranscriptionPane: View {
                 Text("When off, Jot restores your previous clipboard after pasting.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
         }
         .formStyle(.grouped)

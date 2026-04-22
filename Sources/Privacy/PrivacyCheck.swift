@@ -46,16 +46,20 @@ public struct PrivacyCheckResult: Sendable {
 }
 
 public enum PrivacyScanner {
+    /// Scan a log for leaks. `currentAPIKeys` / `customBaseURLs` take arrays
+    /// so callers can pass every per-provider bucket — a leak from a
+    /// previously-used provider still surfaces even if the user has since
+    /// switched providers.
     public static func scan(
         logContents: String,
-        currentAPIKey: String?,
-        customBaseURL: String?,
+        currentAPIKeys: [String],
+        customBaseURLs: [String],
         knownTranscripts: [String],
         homeDirectory: String
     ) -> [PrivacyCheckResult] {
         var results: [PrivacyCheckResult] = []
-        results.append(scanAPIKeys(in: logContents, currentKey: currentAPIKey))
-        results.append(scanCustomEndpoint(in: logContents, url: customBaseURL))
+        results.append(scanAPIKeys(in: logContents, currentKeys: currentAPIKeys))
+        results.append(scanCustomEndpoint(in: logContents, urls: customBaseURLs))
         results.append(scanTranscripts(in: logContents, transcripts: knownTranscripts))
         results.append(scanHomeFolder(in: logContents, home: homeDirectory))
         results.append(scanCredentialURLs(in: logContents))
@@ -70,9 +74,9 @@ public enum PrivacyScanner {
         ("-----BEGIN [A-Z ]*PRIVATE KEY-----", .apiKeys)
     ]
 
-    private static func scanAPIKeys(in text: String, currentKey: String?) -> PrivacyCheckResult {
+    private static func scanAPIKeys(in text: String, currentKeys: [String]) -> PrivacyCheckResult {
         var findings: [PrivacyFinding] = []
-        if let key = currentKey, !key.isEmpty {
+        for key in currentKeys where !key.isEmpty {
             findings.append(contentsOf: exactMatches(of: key, in: text, kind: .apiKeys, label: "[API KEY]"))
         }
         for (pattern, kind) in apiKeyPatterns {
@@ -81,14 +85,12 @@ public enum PrivacyScanner {
         return PrivacyCheckResult(kind: .apiKeys, findings: findings)
     }
 
-    private static func scanCustomEndpoint(in text: String, url: String?) -> PrivacyCheckResult {
-        guard let url, !url.isEmpty else {
-            return PrivacyCheckResult(kind: .customEndpoint, findings: [])
+    private static func scanCustomEndpoint(in text: String, urls: [String]) -> PrivacyCheckResult {
+        var findings: [PrivacyFinding] = []
+        for url in urls where !url.isEmpty {
+            findings.append(contentsOf: exactMatches(of: url, in: text, kind: .customEndpoint, label: "[CUSTOM ENDPOINT]"))
         }
-        return PrivacyCheckResult(
-            kind: .customEndpoint,
-            findings: exactMatches(of: url, in: text, kind: .customEndpoint, label: "[CUSTOM ENDPOINT]")
-        )
+        return PrivacyCheckResult(kind: .customEndpoint, findings: findings)
     }
 
     private static func scanTranscripts(in text: String, transcripts: [String]) -> PrivacyCheckResult {

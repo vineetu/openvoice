@@ -22,6 +22,7 @@ struct ShortcutsPane: View {
                     Text("Global shortcuts fire from any app when Input Monitoring is granted.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                     Spacer()
                     InfoPopoverButton(
                         title: "Global shortcuts",

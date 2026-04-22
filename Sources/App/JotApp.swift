@@ -22,6 +22,25 @@ struct JotApp: App {
                 .modelContainer(appDelegate.modelContainer)
         }
         .windowResizability(.contentMinSize)
+        // Trim the default SwiftUI menu bar down to the essentials. Jot's
+        // entry surface is the menu-bar extra + hotkeys — the top-of-
+        // screen menu is a compliance requirement for a `.regular` app,
+        // not a feature we want users navigating. What remains: Jot (About
+        // + Quit), File (Close Window ⌘W), Edit (copy/paste/select-all,
+        // needed inside text fields), Window (minimal, gone as much as
+        // AppKit lets us). Help is dropped — the Help tab inside the main
+        // window is the canonical help surface.
+        .commands {
+            CommandGroup(replacing: .appSettings) {}
+            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .textFormatting) {}
+            CommandGroup(replacing: .toolbar) {}
+            CommandGroup(replacing: .sidebar) {}
+            CommandGroup(replacing: .windowSize) {}
+            CommandGroup(replacing: .windowArrangement) {}
+            CommandGroup(replacing: .help) {}
+            CommandGroup(replacing: .systemServices) {}
+        }
     }
 }
 

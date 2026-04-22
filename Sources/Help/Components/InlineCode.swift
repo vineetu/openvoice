@@ -23,5 +23,6 @@ struct InlineCode: View {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
             )
+            .textSelection(.enabled)
     }
 }

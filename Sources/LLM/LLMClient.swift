@@ -28,11 +28,12 @@ actor LLMClient {
     func articulate(selectedText: String, instruction: String) async throws -> String {
         let config = await MainActor.run {
             let c = LLMConfiguration.shared
+            let p = c.provider
             return (
-                provider: c.provider,
-                apiKey: c.apiKey,
-                baseURL: c.effectiveBaseURL,
-                model: c.effectiveModel,
+                provider: p,
+                apiKey: c.apiKey(for: p),
+                baseURL: c.effectiveBaseURL(for: p),
+                model: c.effectiveModel(for: p),
                 sharedInvariants: c.articulatePrompt
             )
         }
@@ -49,15 +50,24 @@ actor LLMClient {
 
         // On-device Apple Intelligence short-circuits the HTTP path entirely.
         if config.provider == .appleIntelligence {
-            return try await appleClient.articulate(
-                selectedText: selectedText,
-                instruction: instruction,
-                branchPrompt: systemPrompt
-            )
+            do {
+                return try await appleClient.articulate(
+                    selectedText: selectedText,
+                    instruction: instruction,
+                    branchPrompt: systemPrompt
+                )
+            } catch {
+                let mapped = mapError(error)
+                logLLMError(mapped, provider: config.provider, request: nil, streaming: false, op: "articulate")
+                throw mapped
+            }
         }
 
         if config.provider != .ollama {
-            guard !config.apiKey.isEmpty else { throw LLMError.noAPIKey }
+            guard !config.apiKey.isEmpty else {
+                Task { await ErrorLog.shared.error(component: "LLMClient", message: "Missing API key", context: ["provider": config.provider.rawValue, "op": "articulate"]) }
+                throw LLMError.noAPIKey
+            }
         }
 
         // XML-tag delimiters (OWASP 2025 prompt-injection hardening) and
@@ -260,8 +270,48 @@ actor LLMClient {
             try validateHTTPResponse(response, data: data)
             return try parseResponse(provider: provider, data: data)
         } catch {
-            throw mapError(error)
+            let mapped = mapError(error)
+            logLLMError(mapped, provider: provider, request: request, streaming: false)
+            throw mapped
         }
+    }
+
+    private func logLLMError(_ error: LLMError, provider: LLMProvider, request: URLRequest?, streaming: Bool, op: String = "request") {
+        let host = request?.url.map { ErrorLog.redactedURL($0) } ?? "n/a"
+        var context: [String: String] = [
+            "provider": provider.rawValue,
+            "host": host,
+            "stream": streaming ? "true" : "false",
+            "op": op,
+        ]
+        let message: String
+        switch error {
+        case .noAPIKey:
+            message = "Missing API key"
+        case .invalidURL:
+            message = "Invalid endpoint URL"
+        case .httpError(let statusCode, let body):
+            message = ErrorLog.redactedHTTPError(statusCode: statusCode, provider: provider.rawValue, bodyLength: body.count)
+            context["status"] = String(statusCode)
+            context["bodyLength"] = String(body.count)
+        case .decodingError(let inner):
+            message = "Failed to decode response"
+            context["error"] = ErrorLog.redactedAppleError(inner)
+        case .emptyResponse:
+            message = "Empty response from provider"
+        case .networkError(let inner):
+            message = "Network error"
+            context["error"] = ErrorLog.redactedAppleError(inner)
+        case .suspiciousResponse:
+            message = "Suspicious response length (transform clamp tripped)"
+        case .appleIntelligenceUnavailable:
+            message = "Apple Intelligence unavailable"
+        case .appleIntelligenceFailure(let detail):
+            message = "Apple Intelligence failure"
+            // detail is our own string (e.g. "stalled"); fine to include shape, redact body content.
+            context["detail"] = String(detail.prefix(80))
+        }
+        Task { await ErrorLog.shared.error(component: "LLMClient", message: message, context: context) }
     }
 
     private func streamResponse(provider: LLMProvider, request: URLRequest) async throws -> String {
@@ -281,6 +331,18 @@ actor LLMClient {
                 eventLines.removeAll(keepingCapacity: true)
                 continue
             }
+
+            // Some live providers stream one `data:` record per line, but
+            // `AsyncBytes.lines` does not reliably surface the empty SSE
+            // separator lines. When a new field arrives after we've already
+            // captured a payload line, flush the current event first so we
+            // don't concatenate multiple JSON objects into one parse attempt.
+            if shouldFlushSSEEvent(existingLines: eventLines, nextLine: line) {
+                if let chunk = try parseSSEEvent(provider: provider, lines: eventLines) {
+                    accumulated += chunk
+                }
+                eventLines.removeAll(keepingCapacity: true)
+            }
             eventLines.append(line)
         }
 
@@ -295,6 +357,22 @@ actor LLMClient {
         }
 
         return accumulated
+    }
+
+    private func shouldFlushSSEEvent(existingLines: [String], nextLine: String) -> Bool {
+        guard existingLines.contains(where: { $0.hasPrefix("data:") }) else {
+            return false
+        }
+
+        if nextLine.hasPrefix("data:") {
+            return true
+        }
+
+        if nextLine.hasPrefix("event:") {
+            return true
+        }
+
+        return false
     }
 
     private func validateHTTPResponse(_ response: URLResponse, data: Data) throws {
@@ -478,24 +556,32 @@ actor LLMClient {
 
         let config = await MainActor.run {
             let c = LLMConfiguration.shared
+            let p = c.provider
             return (
-                provider: c.provider,
-                apiKey: c.apiKey,
-                baseURL: c.effectiveBaseURL,
-                model: c.effectiveModel,
+                provider: p,
+                apiKey: c.apiKey(for: p),
+                baseURL: c.effectiveBaseURL(for: p),
+                model: c.effectiveModel(for: p),
                 systemPrompt: c.transformPrompt
             )
         }
 
         // On-device Apple Intelligence short-circuits the HTTP path entirely.
         if config.provider == .appleIntelligence {
-            return try await appleClient.transform(
-                transcript: transcript,
-                instruction: config.systemPrompt
-            )
+            do {
+                return try await appleClient.transform(
+                    transcript: transcript,
+                    instruction: config.systemPrompt
+                )
+            } catch {
+                let mapped = mapError(error)
+                logLLMError(mapped, provider: config.provider, request: nil, streaming: false, op: "transform")
+                throw mapped
+            }
         }
 
         guard config.provider == .ollama || !config.apiKey.isEmpty else {
+            Task { await ErrorLog.shared.error(component: "LLMClient", message: "Missing API key", context: ["provider": config.provider.rawValue, "op": "transform"]) }
             throw LLMError.noAPIKey
         }
 
@@ -516,6 +602,12 @@ actor LLMClient {
         let inputLength = Double(transcript.count)
         let minRatio = inputLength < 50 ? 0.15 : 0.3
         if Double(result.count) < inputLength * minRatio || Double(result.count) > inputLength * 3.0 {
+            Task { await ErrorLog.shared.warn(component: "LLMClient", message: "Suspicious response length — rejected", context: [
+                "provider": config.provider.rawValue,
+                "op": "transform",
+                "inputLen": String(Int(inputLength)),
+                "outputLen": String(result.count),
+            ]) }
             throw LLMError.suspiciousResponse
         }
 
@@ -551,11 +643,12 @@ actor LLMClient {
     func healthCheck() async -> Bool {
         let config = await MainActor.run {
             let c = LLMConfiguration.shared
+            let p = c.provider
             return (
-                provider: c.provider,
-                apiKey: c.apiKey,
-                baseURL: c.effectiveBaseURL,
-                model: c.effectiveModel
+                provider: p,
+                apiKey: c.apiKey(for: p),
+                baseURL: c.effectiveBaseURL(for: p),
+                model: c.effectiveModel(for: p)
             )
         }
 

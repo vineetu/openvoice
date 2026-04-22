@@ -21,5 +21,6 @@ struct Caption: View {
             .lineSpacing(2.5)
             .foregroundStyle(.primary)
             .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
     }
 }

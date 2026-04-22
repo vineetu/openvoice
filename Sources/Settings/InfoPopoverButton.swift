@@ -60,6 +60,7 @@ struct InfoPopoverButton: View {
                 .font(.body)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
 
             if let helpAnchor {
                 Button {

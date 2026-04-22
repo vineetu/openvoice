@@ -36,6 +36,7 @@ struct CleanupStep: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .textSelection(.enabled)
 
             if let transcript = coordinator.testTranscript,
                !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -118,6 +119,7 @@ struct CleanupStep: View {
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.leading, 12)
+                .textSelection(.enabled)
         }
     }
 
@@ -166,6 +168,7 @@ struct CleanupStep: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .textSelection(.enabled)
         }
         .padding(12)
         .background(
@@ -183,6 +186,7 @@ struct CleanupStep: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .textSelection(.enabled)
     }
 }
 

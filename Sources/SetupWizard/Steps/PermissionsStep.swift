@@ -14,6 +14,7 @@ struct PermissionsStep: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
+            .textSelection(.enabled)
 
             VStack(spacing: 12) {
                 PermissionRow(
@@ -128,6 +129,7 @@ private struct PermissionRow: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
             }
 
             Spacer(minLength: 8)

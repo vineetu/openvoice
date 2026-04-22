@@ -17,6 +17,7 @@ struct MicrophoneStep: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
+            .textSelection(.enabled)
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
@@ -33,6 +34,7 @@ struct MicrophoneStep: View {
                 Text("Custom device selection is temporarily disabled while we fix a bug — Jot follows your macOS Sound settings default for now.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -108,10 +110,11 @@ private final class InputLevelMeter: ObservableObject {
 
     private var engine: AVAudioEngine?
     private var timer: Timer?
-    private var peak: Float = 0
+    fileprivate var peak: Float = 0
+    private var setupTask: Task<Void, Never>?
 
     func start() {
-        guard engine == nil else { return }
+        guard engine == nil, setupTask == nil else { return }
         // Microphone permission is required to actually see meaningful values;
         // if it's not granted we still spin up the engine but the tap will
         // emit silence — the UI degrades to "bars sit idle" rather than
@@ -119,35 +122,8 @@ private final class InputLevelMeter: ObservableObject {
         // after that (though Skip can bypass it).
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else { return }
 
-        let engine = AVAudioEngine()
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            let frames = Int(buffer.frameLength)
-            guard frames > 0, let channel = buffer.floatChannelData?[0] else { return }
-            var maxAmp: Float = 0
-            for i in 0..<frames {
-                let v = abs(channel[i])
-                if v > maxAmp { maxAmp = v }
-            }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                // Smooth decay so the bars don't flap violently.
-                self.peak = Swift.max(maxAmp, self.peak * 0.8)
-                self.level = min(1.0, self.peak)
-            }
-        }
-
-        do {
-            try engine.start()
-            self.engine = engine
-        } catch {
-            // Tap was installed on the shared input node; tear it down so the
-            // next mount can retry cleanly.
-            input.removeTap(onBus: 0)
-        }
-
-        // Fallback decay — keeps bars settling even when the mic is silent.
+        // Decay timer runs regardless of engine state — bars sit idle at 0
+        // if engine setup fails/times out (same UX as a silent mic).
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -155,9 +131,89 @@ private final class InputLevelMeter: ObservableObject {
                 self.level = min(1.0, self.peak)
             }
         }
+
+        // CoreAudio-touching setup runs on a background GCD queue under a
+        // 5s timeout. Accessing `engine.inputNode`, querying
+        // `outputFormat`, `installTap`, and `engine.start()` can each block
+        // indefinitely when `coreaudiod` is wedged (iOS Simulator hogging
+        // hardware, Bluetooth glitch, sleep/wake race). Doing this inline
+        // on @MainActor froze the wizard pane. Offloading keeps the UI
+        // responsive — on timeout we log and the bars stay at 0 until the
+        // user fixes coreaudiod (Help → Troubleshooting shows how).
+        setupTask = Task { [weak self] in
+            guard let meter = self else { return }
+            let engine = await Self.configureMeterEngineWithTimeout(meter: meter, seconds: 5)
+            meter.setupTask = nil
+            guard !Task.isCancelled, meter.engine == nil else {
+                // stop() ran before setup finished — tear down the orphan
+                if let engine {
+                    engine.inputNode.removeTap(onBus: 0)
+                    engine.stop()
+                }
+                return
+            }
+            meter.engine = engine
+        }
+    }
+
+    /// Mirrors `AudioCapture.configureEngineWithTimeout` — wraps all the
+    /// CoreAudio-touching calls in a background-queue closure with a
+    /// timeout so a wedged `coreaudiod` can't hang the main thread.
+    /// Returns the running engine on success, `nil` on failure or timeout.
+    private static func configureMeterEngineWithTimeout(
+        meter: InputLevelMeter,
+        seconds: Double
+    ) async -> AVAudioEngine? {
+        await withCheckedContinuation { (cont: CheckedContinuation<AVAudioEngine?, Never>) in
+            let lock = NSLock()
+            var hasResumed = false
+            func resumeOnce(_ value: AVAudioEngine?) {
+                lock.lock(); defer { lock.unlock() }
+                guard !hasResumed else { return }
+                hasResumed = true
+                cont.resume(returning: value)
+            }
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                let engine = AVAudioEngine()
+                let input = engine.inputNode
+                let format = input.outputFormat(forBus: 0)
+                input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak meter] buffer, _ in
+                    let frames = Int(buffer.frameLength)
+                    guard frames > 0, let channel = buffer.floatChannelData?[0] else { return }
+                    var maxAmp: Float = 0
+                    for i in 0..<frames {
+                        let v = abs(channel[i])
+                        if v > maxAmp { maxAmp = v }
+                    }
+                    Task { @MainActor [weak meter] in
+                        guard let meter else { return }
+                        // Smooth decay so the bars don't flap violently.
+                        meter.peak = Swift.max(maxAmp, meter.peak * 0.8)
+                        meter.level = min(1.0, meter.peak)
+                    }
+                }
+
+                do {
+                    try engine.start()
+                    resumeOnce(engine)
+                } catch {
+                    input.removeTap(onBus: 0)
+                    Task { await ErrorLog.shared.warn(component: "SetupWizard", message: "Mic preview engine start failed", context: ["error": ErrorLog.redactedAppleError(error)]) }
+                    resumeOnce(nil)
+                }
+            }
+
+            DispatchQueue.global().asyncAfter(deadline: .now() + seconds) {
+                Task { await ErrorLog.shared.warn(component: "SetupWizard", message: "Mic preview engine setup timed out (>5s) — coreaudiod may be stuck; see Help → Troubleshooting") }
+                resumeOnce(nil)
+            }
+        }
     }
 
     func stop() {
+        setupTask?.cancel()
+        setupTask = nil
         if let engine {
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()

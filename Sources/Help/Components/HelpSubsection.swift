@@ -30,5 +30,6 @@ struct HelpSubsection<Content: View>: View {
             content()
         }
         .id(anchor)
+        .textSelection(.enabled)
     }
 }

@@ -44,10 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var deliveryBridge: AnyCancellable?
 
     /// Strong reference to the proxy delegate installed on the unified
-    /// main window so the red close button hides it instead of tearing
-    /// the SwiftUI scene down. The app is a menu-bar agent (LSUIElement),
-    /// so without this the user would have no AppKit chrome to reopen
-    /// the window after a close.
+    /// main window so the red close button (and ⌘W) hide it instead of
+    /// tearing the SwiftUI scene down. Even as a `.regular` app we want
+    /// close-means-hide semantics so closing the window leaves the
+    /// menu-bar extra and hotkeys alive — ⌘Q is the only way to quit.
     private var closeInterceptor: MainWindowCloseInterceptor?
 
     /// Token for the `NSWindow.didBecomeKeyNotification` subscription
@@ -59,7 +59,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        // `.regular` — Jot shows a Dock icon, appears in ⌘Tab, and is
+        // listed in Force Quit. ⌘W hides the window (via the close
+        // interceptor below) so the app keeps running in the menu bar
+        // + Dock; ⌘Q terminates. Previously `.accessory` with
+        // `LSUIElement = true`, which hid the app from every AppKit
+        // surface — unfriendly when the app ever wedged, since users
+        // couldn't Force Quit it through normal channels.
+        NSApp.setActivationPolicy(.regular)
         log.info("Jot launched")
         ResetActions.processPendingHardReset()
 
@@ -112,7 +119,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         self.hotkeyRouter = router
 
-        self.menuBar = JotMenuBarController(recorder: recorder, delivery: delivery)
+        self.menuBar = JotMenuBarController(
+            recorder: recorder,
+            delivery: delivery,
+            modelContext: modelContainer.mainContext
+        )
         self.menuBar.install()
 
         self.overlay = OverlayWindowController(recorder: recorder, delivery: delivery, articulateController: articulate)
@@ -183,11 +194,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    // Jot is a menu-bar agent. Closing the main window (red X or ⌘W) must
-    // leave the process alive so hotkeys, the menu-bar extra, and the
-    // status pill keep working — only ⌘Q quits. LSUIElement alone doesn't
-    // guarantee this; AppKit still auto-terminates an app after its last
-    // window closes unless the delegate explicitly says otherwise.
+    // Closing the main window (red X or ⌘W) must leave the process
+    // alive so hotkeys, the menu-bar extra, and the status pill keep
+    // working — only ⌘Q quits. AppKit would otherwise auto-terminate a
+    // `.regular` app after its last window closes.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }

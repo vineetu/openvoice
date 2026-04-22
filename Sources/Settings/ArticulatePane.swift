@@ -51,6 +51,7 @@ struct ArticulatePane: View {
                             Text("On-device via Apple Foundation Models. No API key required.")
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
                         }
                     } else {
                         HStack(alignment: .top, spacing: 6) {
@@ -59,11 +60,12 @@ struct ArticulatePane: View {
                             Text("Apple Intelligence isn't available on this Mac. Requires macOS 26.0 or later on Apple Silicon with Apple Intelligence enabled.")
                                 .font(.system(size: 11))
                                 .foregroundStyle(.orange)
+                                .textSelection(.enabled)
                         }
                     }
                 } else {
                     HStack {
-                        TextField("Base URL (leave empty for default)", text: $config.baseURL)
+                        TextField("Base URL (leave empty for default)", text: config.baseURLBinding(for: config.provider))
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.leading)
                         InfoPopoverButton(
@@ -75,8 +77,9 @@ struct ArticulatePane: View {
                     Text("Default: \(config.provider.defaultBaseURL)")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                     HStack {
-                        TextField("Model (leave empty for default)", text: $config.model)
+                        TextField("Model (leave empty for default)", text: config.modelBinding(for: config.provider))
                             .textFieldStyle(.roundedBorder)
                         InfoPopoverButton(
                             title: "Model",
@@ -87,6 +90,7 @@ struct ArticulatePane: View {
                     Text("Default: \(config.provider.defaultModel)")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
             }
 
@@ -95,9 +99,12 @@ struct ArticulatePane: View {
                     HStack {
                         SecureField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
-                            .onAppear { apiKeyInput = config.apiKey }
+                            .onAppear { apiKeyInput = config.apiKey(for: config.provider) }
+                            .onChange(of: config.provider) { _, newProvider in
+                                apiKeyInput = config.apiKey(for: newProvider)
+                            }
                             .onChange(of: apiKeyInput) { _, newValue in
-                                config.apiKey = newValue
+                                config.setAPIKey(newValue, for: config.provider)
                             }
                         InfoPopoverButton(
                             title: "API Key",
@@ -117,6 +124,7 @@ struct ArticulatePane: View {
                 Text("Select text, press the shortcut, speak your instruction.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
 
                 HStack {
                     Text("Articulate")
@@ -126,6 +134,7 @@ struct ArticulatePane: View {
                 Text("Select text and press the shortcut — Jot articulates it with a built-in prompt. No voice step.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
             }
 
             Section("Prompt") {
@@ -179,6 +188,7 @@ struct ArticulatePane: View {
                             Text("Connection verified")
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
                         }
                     case .failure(let message):
                         HStack(spacing: 6) {
@@ -187,6 +197,7 @@ struct ArticulatePane: View {
                             Text(message)
                                 .font(.system(size: 11))
                                 .foregroundStyle(.red)
+                                .textSelection(.enabled)
                         }
                     }
                 }
