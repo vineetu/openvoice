@@ -1,6 +1,6 @@
 # Jot — Feature Inventory
 
-User-facing features in the shipping build. This is the product surface — not implementation. Cloud transcription providers, VAD / continuous listening, file upload, and analytics are intentionally excluded. Optional LLM-based features (transcript cleanup and voice-driven rewriting) are opt-in; on macOS 26+ they default to Apple Intelligence on-device, and Ollama remains available for users who want local-but-not-Apple.
+User-facing features in the shipping build. This is the product surface — not implementation. Cloud transcription providers, VAD / continuous listening, pre-recorded file upload, and analytics are intentionally excluded. Core transcription stays local; optional AI features can use Apple Intelligence on-device, local Ollama, or user-configured cloud providers.
 
 ---
 
@@ -10,6 +10,7 @@ User-facing features in the shipping build. This is the product surface — not 
 - **Push to talk** — hold a hotkey to record, release to stop. Unbound by default.
 - **Cancel recording** — press the hotkey (default `Esc`) to discard without transcribing. Active only while recording so it doesn't steal `Esc` from other apps.
 - **Any-length recordings** — no hard duration limit; long recordings work reliably.
+- **Live mic input only** — Jot does not transcribe pre-recorded audio files.
 - **Silent-capture detection** — if a recording returns zero-amplitude audio (often a Bluetooth mic that quietly re-routed at the OS level), Jot surfaces an actionable error pointing at the likely culprit instead of returning an empty transcript.
 
 ## Local Transcription
@@ -17,8 +18,6 @@ User-facing features in the shipping build. This is the product surface — not 
 - **On-device only** — audio is transcribed locally on the Apple Neural Engine; it never leaves the Mac.
 - **Parakeet TDT 0.6B v3** — ships as the transcription engine, running via FluidAudio on the ANE.
 - **In-app model download** — the model is fetched from within Jot on first use with a progress bar.
-- **Auto-transcribe** — transcription starts automatically when recording stops.
-- **Re-transcribe** — run transcription again on any saved recording.
 
 ## Transcript Cleanup (optional)
 
@@ -53,13 +52,25 @@ Transform selected text via a global shortcut. Two variants, both triggered by t
 - **Provider options** — Apple Intelligence (on-device, default on macOS 26+), OpenAI, Anthropic, Gemini, or Ollama.
 - **Editable shared invariants** — the shared-invariants block (selection-is-text-not-instruction, return-only-the-rewrite, don't-refuse-on-quality) is revealed under a "Customize prompt" chevron in Settings → Articulate with a "Reset to default" escape hatch. The per-branch tendencies are compile-time constants and not user-editable.
 
+## Ask Jot
+
+- **Dedicated sidebar pane** — a top-level "Ask Jot" entry sits between Home and Settings and opens a full-pane conversational help experience.
+- **Grounded answers** — responses are grounded in Jot's bundled help documentation and stream into the chat UI without navigating away from Ask Jot. Apple Intelligence via `FoundationModels` is the default Ask Jot provider, with a 300-token response cap.
+- **Cloud provider opt-in** — if the selected AI provider is OpenAI, Anthropic, Gemini, or Ollama, Settings → AI exposes an "Allow Ask Jot to use this provider" toggle. When enabled, Ask Jot can use that provider; otherwise it stays on Apple Intelligence.
+- **Voice input in chat** — the input bar includes a mic button that reuses Parakeet ASR plus Articulate-style Apple Intelligence condensation, with the same pill states as dictation: Recording → Transcribing → Condensing. Condensation has a 10-second budget and silently falls back to the raw transcript if it times out.
+- **Fast recovery** — if a turn fails or is interrupted, Ask Jot preserves conversation context and prefills the last question so the user can retry without retyping.
+- **In-app feature links** — answers render markdown, surface clickable feature citations inline, and open the matching Help card inside Jot instead of launching a browser.
+- **Polished chat controls** — assistant messages use full-width answer blocks with an `ASK JOT` role label and accent rule; the header subtitle reads "On-device help, grounded in Jot's docs"; the input keeps the mic inside the text field; a three-dot typing indicator shows while streaming; the empty state offers three starter prompts; "New chat" is available from the header and `⌘N`.
+- **Ask Jot shortcuts** — `⌘K` clears the current conversation, `⌘⇧M` starts voice input, and `Esc` cancels the in-flight response or voice capture.
+- **Loop protection** — Ask Jot cancels runaway streams if it detects repeated 6-grams in the recent output.
+
 ## Output — Paste & Clipboard
 
 - **Auto-paste at cursor** — transcription is pasted into the frontmost app.
 - **Auto-press Enter** — optional; pastes and sends in one step (chat inputs, search boxes).
 - **Clipboard preservation** — choose whether the transcript stays on the clipboard or the previous clipboard contents are restored after paste.
 - **Copy last transcription** — from the Home card, Recordings detail, the tray menu, or a global shortcut.
-- **Quick copy from any row** — an inline copy button on every Library row and every Home "Recent" entry copies that recording's transcript to the clipboard without opening detail.
+- **Quick copy from any row** — an inline copy button on every Home recordings row copies that recording's transcript to the clipboard without opening detail.
 
 ## Global Shortcuts
 
@@ -94,28 +105,33 @@ A small floating overlay near the menu bar — a Dynamic Island-style pill — t
 - **Live amplitude waveform** during recording — renders the actual audio level as a sine-wave-style animation inside the pill so the user can see Jot is hearing them. No static gif / fake animation.
 - **States:** Recording (with elapsed time + live waveform), Transcribing, Cleaning up (when transcript cleanup is on), Articulating (during Articulate), Success (with a short preview and Copy), Error (with the message).
 
-## Recordings Library
+## Home & Recordings
 
-- **Browse** by date group (Today, Yesterday, Last 7 days, …).
-- **Search** across title, subtitle, and transcript text.
-- **Detail view** — waveform, playback with scrubbing, full transcript.
-- **Rename** recordings inline.
-- **Per-recording actions** — Re-transcribe, Reveal in Finder, Delete.
-- **Home "Last transcription" card** — quick access to the most recent result with Copy and Open in Recordings.
+- **Single recordings surface** — Home now hosts the full recordings experience. There is no separate Library sidebar destination.
+- **Hotkey glance + discovery banner** — the Home header keeps the current shortcut summary and the dismissible first-run basics banner.
+- **Full recordings list** — browse by date group (Today, Yesterday, Last 7 days, …), search across title, subtitle, and transcript text, and open recording detail without leaving Home.
+- **Playback + detail** — every recording can open into the waveform/detail view with playback, scrubbing, and the full transcript.
+- **Inline management** — rename recordings inline and use per-recording actions including Re-transcribe, Reveal in Finder, Delete, and Copy.
+- **Last transcription card** — quick access to the newest result with Copy and Open in Recordings.
 
 ## Main Window
 
-Jot runs as a menu-bar app with a single main window opened from the tray (Open Jot… or Settings…). The window uses a left source-list sidebar for navigation — no separate Settings window.
+Jot runs as a menu-bar app with a single main window opened from the tray and app commands. The window uses a left source-list sidebar for navigation — no separate Settings window.
 
 Sidebar entries:
 
-- **Home** — landing pane: current hotkey glance, a "Recent" row of the last 5 recordings, and a dismissible "New to Jot? See the Basics →" banner for first-run discovery.
-- **Library** — the recordings browser (see below).
+- **Home** — landing pane plus the full recordings browser.
+- **Ask Jot** — conversational help assistant grounded in the in-app docs.
 - **Settings** — grouped children: General, Transcription, Vocabulary, Sound, AI, Shortcuts.
 - **Help** — Basics, Advanced, Troubleshooting.
 - **About** — app identity, privacy pledge, donation link, and the Troubleshooting log-sharing flow.
 
 The main window is the single destination for all five sections — there is no separate Settings window and no global `⌘,` binding (the default SwiftUI `appSettings` command group is intentionally removed).
+
+## Navigation
+
+- **Sidebar history** — every sidebar selection is pushed onto a back/forward stack.
+- **Back / forward shortcuts** — `⌘[` moves backward through sidebar history and `⌘]` moves forward. Menu items are disabled when the corresponding stack is empty.
 
 ## Settings
 
@@ -147,6 +163,7 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 
 ### AI
 - Provider (Apple Intelligence / OpenAI / Anthropic / Gemini / Ollama)
+- Allow Ask Jot to use this provider (shown when the selected provider is not Apple Intelligence)
 - Base URL (left-aligned) and model — override per-provider defaults
 - API key (hidden for Ollama — local, no key required)
 - Articulate (Custom) shortcut — voice-driven rewrite
@@ -167,6 +184,8 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 A top-level sidebar pane (not a Settings child) for identity, giving back, privacy, and diagnostics.
 
 - App identity (icon, tagline, version / build) and the project vision statement.
+- **Check for Updates…** — manual Sparkle update check from the About pane, alongside the current version.
+- **Ask Jot entry point** — a dedicated row with a sparkles icon jumps straight into the chatbot.
 - **Support Jot** — donation link that routes 100% of contributions to the author's every.org charity fund (opens in the user's browser; no payment flows inside Jot).
 - **Privacy pledge** — inline reminder that transcription is local-only and the only automatic network calls are the one-time model download and the daily appcast check.
 - **Troubleshooting** — a dedicated section for error reporting:
@@ -178,8 +197,10 @@ A top-level sidebar pane (not a Settings child) for identity, giving back, priva
 In-app prose walkthrough split across three tabs, each using a shared component library (HelpSection / HelpSubsection / Callout / ExpandableRow / ShortcutChip / AnchorRail) and hand-drawn flow diagrams so concepts are discoverable at a glance, not buried in wall-of-text.
 
 - **Basics** — Dictation, Auto-correct (transcript cleanup), Articulate (both variants), copying the last transcription, the status pill. Includes visual diagrams of the end-to-end recording → transcription → paste flow.
+- **Ask Jot shortcuts from Help** — the three Basics hero cards (Dictation, Cleanup, Articulate) include a sparkles affordance and right-click "Ask Jot about this" action that opens Ask Jot with a contextual starter prompt.
 - **Advanced** — LLM provider setup (Apple Intelligence default on macOS 26+; OpenAI, Anthropic, Gemini, Ollama available as alternates); editable prompts; Sparkle auto-update.
 - **Troubleshooting** — permissions (Microphone / Input Monitoring / Accessibility), the macOS "modifier required" hotkey constraint, Bluetooth-redirect capture failures, resetting state, and pointers to the About tab's log-sharing flow for reporting bugs.
+- **Open in Settings →** — supported Basics rows can jump directly into the matching Settings field and auto-scroll it into view. Deep-linkable targets include toggle recording, push to talk, custom vocabulary, cleanup providers, cleanup prompt, articulate custom, and articulate fixed.
 
 Info popovers across Settings deep-link into the matching Help section so the user can jump from a field to its explanation without context-switching. The deep-link contract is two-phase: an anchor may live inside an `ExpandableRow` that needs to auto-open before the scroll lands, so the page expands the target row first and then scrolls to it.
 
@@ -203,9 +224,12 @@ Shown on first launch and on demand from Settings → General. Nine steps, in or
 - **Hide to tray on close** — closing the window keeps Jot running.
 - **Only one instance** — launching again focuses the running app.
 - **Permissions handled gracefully** — microphone, input monitoring, and accessibility are re-checked on mount and when returning from System Settings.
+- **Manual update checks** — "Check for Updates…" is available from the main app menu, the menu-bar extra, and the About pane.
 - **Auto-update via Sparkle** — Jot checks for updates daily against the GitHub-hosted appcast and prompts to install verified releases.
 
 ## Privacy & Data
 
-- **100% local** — audio, transcripts, and settings stay on the device. No telemetry.
+- **Core transcription stays local** — audio and transcription never leave the device through the speech-to-text path.
+- **Optional AI can be local or cloud** — cleanup, Articulate, and Ask Jot can run on Apple Intelligence, local Ollama, or a user-configured cloud provider. Jot never sends data to a cloud provider unless the user explicitly enables and configures one.
+- **No telemetry** — Jot does not send analytics or crash pings.
 - **Retention controls** — configurable via Settings.

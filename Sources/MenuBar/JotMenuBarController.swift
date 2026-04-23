@@ -20,6 +20,7 @@ final class JotMenuBarController: NSObject {
     /// Context for the SwiftData store, used by the "Recent Transcriptions"
     /// submenu to fetch the 10 most recent `Recording` rows on demand.
     private let modelContext: ModelContext
+    private let checkForUpdatesAction: () -> Void
 
     private static let menuBarIconName = NSImage.Name("JotMenuIcon")
 
@@ -51,10 +52,16 @@ final class JotMenuBarController: NSObject {
 
     // MARK: - Init
 
-    init(recorder: RecorderController, delivery: DeliveryService, modelContext: ModelContext) {
+    init(
+        recorder: RecorderController,
+        delivery: DeliveryService,
+        modelContext: ModelContext,
+        checkForUpdatesAction: @escaping () -> Void
+    ) {
         self.recorder = recorder
         self.delivery = delivery
         self.modelContext = modelContext
+        self.checkForUpdatesAction = checkForUpdatesAction
         super.init()
     }
 
@@ -183,7 +190,7 @@ final class JotMenuBarController: NSObject {
         recentSubmenu.addItem(.separator())
         let showAll = NSMenuItem(
             title: "Show All Recordings…",
-            action: #selector(showLibrary),
+            action: #selector(showRecordingsHome),
             keyEquivalent: ""
         )
         showAll.target = self
@@ -376,18 +383,17 @@ final class JotMenuBarController: NSObject {
     }
 
     @objc private func checkForUpdates() {
-        guard let delegate = NSApp.delegate as? AppDelegate else { return }
-        delegate.updaterController.checkForUpdates(nil)
+        checkForUpdatesAction()
     }
 
-    @objc private func showLibrary() {
-        openUnifiedWindow(selection: .library)
+    @objc private func showRecordingsHome() {
+        openUnifiedWindow(selection: .home)
     }
 
     /// Menu-item click handler for a row inside the Recent Transcriptions
     /// submenu. Pulls the `UUID` from `representedObject`, re-fetches the
     /// Recording from SwiftData (fresh text even if edited inside the
-    /// Library), and copies the transcript to the clipboard.
+    /// Home recordings list), and copies the transcript to the clipboard.
     @objc private func copyRecordingTranscript(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID else { return }
         var descriptor = FetchDescriptor<Recording>(

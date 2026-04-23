@@ -67,6 +67,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
+    func checkForUpdates() {
+        updaterController.checkForUpdates(nil)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // `.regular` — Jot shows a Dock icon, appears in ⌘Tab, and is
         // listed in Force Quit. ⌘W hides the window (via the close
@@ -77,6 +81,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // couldn't Force Quit it through normal channels.
         NSApp.setActivationPolicy(.regular)
         log.info("Jot launched")
+
+        #if DEBUG
+        // Run the Help infrastructure invariants — Feature catalog
+        // completeness, search / navigator behavior, and the
+        // InfoPopoverButton anchor registry (every info.circle anchor
+        // across Settings must resolve to a deep-linkable Feature).
+        // `assertionFailure` in any of these trips the debugger so the
+        // offending slug is obvious.
+        HelpInfraTests.runAll()
+        // Ask Jot voice-input pipeline invariants — skip rules,
+        // degenerate-output detection, and condenser-race fallback.
+        ChatbotVoiceInputTests.runAll()
+        #endif
+
         ResetActions.processPendingHardReset()
 
         if singleInstance.anotherInstanceIsRunning() {
@@ -128,7 +146,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.menuBar = JotMenuBarController(
             recorder: recorder,
             delivery: delivery,
-            modelContext: modelContainer.mainContext
+            modelContext: modelContainer.mainContext,
+            checkForUpdatesAction: { [weak self] in
+                self?.checkForUpdates()
+            }
         )
         self.menuBar.install()
 

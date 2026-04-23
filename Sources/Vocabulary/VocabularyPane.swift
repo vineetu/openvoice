@@ -27,42 +27,50 @@ enum BoostModelStatus: Equatable {
 struct VocabularyPane: View {
     @StateObject private var store = VocabularyStore.shared
     @FocusState private var focusedID: VocabTerm.ID?
+    @Environment(\.helpNavigator) private var navigator
     @State private var boostModelStatus: BoostModelStatus = .notDownloaded
 
     var body: some View {
-        Form {
-            headerSection
-            boostModelSection
-            Section {
-                if store.terms.isEmpty {
-                    emptyStateView
-                } else {
-                    ForEach(store.terms) { term in
-                        VocabRow(
-                            term: binding(for: term.id),
-                            focused: $focusedID,
-                            onDelete: { delete(term.id) }
-                        )
+        ScrollViewReader { proxy in
+            Form {
+                headerSection
+                    .id("custom-vocabulary")
+                boostModelSection
+                Section {
+                    if store.terms.isEmpty {
+                        emptyStateView
+                    } else {
+                        ForEach(store.terms) { term in
+                            VocabRow(
+                                term: binding(for: term.id),
+                                focused: $focusedID,
+                                onDelete: { delete(term.id) }
+                            )
+                        }
                     }
+                    addTermButton
                 }
-                addTermButton
+                if !store.terms.isEmpty { statusFooter }
             }
-            if !store.terms.isEmpty { statusFooter }
-        }
-        .formStyle(.grouped)
-        .onAppear {
-            // Reload from disk in case the user edited the vocabulary
-            // file externally (vi, VS Code, etc.) since the last time
-            // the pane was opened. `VocabularyStore.shared` is a
-            // process-lifetime singleton and only loads once at init
-            // without this — which otherwise means external edits are
-            // invisible until the app relaunches.
-            store.load()
-            refreshBoostModelStatus()
-        }
-        .onChange(of: store.isEnabled) { _, enabled in
-            if enabled { Task { await prepareRescorerIfPossible() } }
-            else { Task { await VocabularyRescorerHolder.shared.unload() } }
+            .formStyle(.grouped)
+            .onAppear {
+                // Reload from disk in case the user edited the vocabulary
+                // file externally (vi, VS Code, etc.) since the last time
+                // the pane was opened. `VocabularyStore.shared` is a
+                // process-lifetime singleton and only loads once at init
+                // without this — which otherwise means external edits are
+                // invisible until the app relaunches.
+                store.load()
+                refreshBoostModelStatus()
+                consumePendingSettingsFieldAnchor(with: proxy)
+            }
+            .onChange(of: store.isEnabled) { _, enabled in
+                if enabled { Task { await prepareRescorerIfPossible() } }
+                else { Task { await VocabularyRescorerHolder.shared.unload() } }
+            }
+            .onChange(of: navigator.pendingSettingsFieldAnchor) { _, _ in
+                consumePendingSettingsFieldAnchor(with: proxy)
+            }
         }
     }
 
@@ -203,7 +211,7 @@ struct VocabularyPane: View {
                 InfoPopoverButton(
                     title: "Custom vocabulary",
                     body: "A short list of words Jot should prefer — product names, company names, technical jargon. When on, Jot scans each recording for these terms and replaces common misfires (\"you jet\" → \"UJET\") with your canonical spelling. Entirely on-device. Keep the list small (under 100 terms) for best results.",
-                    helpAnchor: "help.dictation.vocabulary"
+                    helpAnchor: "custom-vocabulary"
                 )
             }
             .padding(.vertical, 2)
@@ -260,6 +268,14 @@ struct VocabularyPane: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             focusedID = new.id
         }
+    }
+
+    private func consumePendingSettingsFieldAnchor(with proxy: ScrollViewProxy) {
+        guard navigator.pendingSettingsFieldAnchor == "custom-vocabulary" else { return }
+        withAnimation {
+            proxy.scrollTo("custom-vocabulary", anchor: .top)
+        }
+        navigator.clearPendingSettingsFieldAnchor()
     }
 
     private func delete(_ id: VocabTerm.ID) {

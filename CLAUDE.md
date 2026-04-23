@@ -1,6 +1,6 @@
 # Jot
 
-Native macOS dictation utility. Press a hotkey, speak, and the transcript is pasted at the cursor. Entirely on-device, no network, no telemetry.
+Native macOS dictation utility. Press a hotkey, speak, and the transcript is pasted at the cursor. Core transcription stays on-device; optional AI features can use Apple Intelligence, local Ollama, or user-configured cloud providers. No telemetry.
 
 **Stack:** Swift / SwiftUI with AppKit interop (`NSStatusItem`, `NSPanel`). Transcription via [FluidAudio](https://github.com/FluidInference/FluidAudio) running Parakeet TDT 0.6B v3 on the Apple Neural Engine. Audio capture through `AVAudioEngine` + `AVAudioConverter` (16 kHz mono Float32). Global hotkeys via `sindresorhus/KeyboardShortcuts`. Persistence via SwiftData; prefs via `@AppStorage` / `UserDefaults`.
 
@@ -17,16 +17,18 @@ Single Xcode project, one executable target. Each layer is a Swift function boun
 | Layer | Responsibility |
 |---|---|
 | **App** | `@main` entry point, scenes, `AppDelegate`, top-level observable state, permission checks |
-| **MenuBar** | `NSStatusItem` owner + native `NSMenu`; dynamic "Start / Stop Recording" label; "Open Jot…" and "Settings…" (`⌘,`) both open the unified main window |
-| **MainWindow** | Single `NSWindow` shell with a source-list sidebar (Home / Library / Settings / Help); owns routing between sections and the deep-link contract from Settings popovers into Help |
-| **Home** | Landing pane: hotkey glance, recent recordings row, dismissible first-run banner |
+| **MenuBar** | `NSStatusItem` owner + native `NSMenu`; dynamic "Start / Stop Recording" label; "Open Jot…", Recent Transcriptions, and "Check for Updates…" |
+| **MainWindow** | Single `NSWindow` shell with a source-list sidebar (Home / Ask Jot / Settings / Help / About); owns routing between sections, sidebar history, and the deep-link contract between Settings, Help, and Ask Jot |
+| **Home** | Landing pane: hotkey glance, dismissible first-run banner, full recordings search/list/detail surface |
+| **Ask Jot** | Conversational help chatbot pane; grounded in bundled `help-content.md`; Apple Intelligence default, optional cloud routing; markdown answers, voice input, and in-app feature citations |
+| **AskJot/Cloud** | Provider-specific streaming adapters (`OpenAI`, `Anthropic`, `Gemini`, `Ollama`) plus inline tool-calling for feature-slug navigation when cloud Ask Jot is enabled |
 | **Overlay** | `NSPanel`-hosted SwiftUI status indicator (Dynamic Island-style pill under the notch) |
 | **Recording** | `AVAudioEngine` tap → converter → buffer + WAV on disk; hotkey routing with dynamic Escape; CoreAudio device pinning |
 | **Transcription** | FluidAudio wrapper (single in-flight), post-processing, model download/load |
 | **Delivery** | Clipboard sandwich: save → write → synthetic `⌘V` → restore; optional auto-Enter |
-| **Library** | SwiftData recordings list with search, date grouping, detail + playback, per-row actions |
-| **Settings** | Sidebar section (not a separate scene): General / Transcription / Sound / AI / Shortcuts. Per-field `info.circle` popovers with "Learn more →" deep-links into Help. Editable LLM prompts under `CustomizePromptDisclosure` |
-| **Help** | In-app prose walkthrough: Basics / Advanced / Troubleshooting. Accepts deep-links from Settings popovers |
+| **Library** | SwiftData recordings model + recordings UI state powering the Home list, detail view, playback, and per-row actions |
+| **Settings** | Sidebar section (not a separate scene): General / Transcription / Vocabulary / Sound / AI / Shortcuts. Per-field `info.circle` popovers with "Learn more →" deep-links into Help. Editable LLM prompts under `CustomizePromptDisclosure` |
+| **Help** | In-app prose walkthrough: Basics / Advanced / Troubleshooting. Accepts deep-links from Settings popovers, Ask Jot feature links, and Help hero sparkle affordances |
 | **LLM** | Provider-neutral client for transcript cleanup (Transform) + Articulate; Apple Intelligence (on-device, default for new installs on macOS 26+), OpenAI, Anthropic, Gemini, Ollama. Apple Intelligence bypasses the HTTP client entirely and calls the on-device `FoundationModels` framework via `AppleIntelligenceClient`. Articulate uses a regex instruction classifier (`ArticulateInstructionClassifier`) to route to one of four branch prompts — voice-preserving / structural / translation / code — composed on top of a small shared-invariants block |
 | **Articulate** | Two hotkeys, one pipeline. `.articulateCustom` (v1.4 "Rewrite Selection", raw binding key preserved): selection → synthetic ⌘C → record voice instruction → classify → branch-specific LLM prompt → paste back. `.articulate` (v1.5): selection → synthetic ⌘C → fixed `"Articulate this"` instruction → LLM → paste back. No voice capture on the fixed-prompt path |
 | **SetupWizard** | First-run window: Welcome → Permissions → Model → Microphone → Shortcuts → Test |
@@ -43,21 +45,36 @@ Swift code lives under `Sources/` at repo root, with `Resources/` alongside it. 
 ```
 Sources/
   App/            ← App layer (entry, AppDelegate, root state)
+  AskJot/         ← Ask Jot chatbot pane, state, rendering, voice input, slug-link pipeline
+  AskJot/Cloud/   ← Cloud Ask Jot streaming adapters + tool-calling
   MenuBar/        ← NSStatusItem + NSMenu
   Overlay/        ← NSPanel status-indicator pill
-  Home/           ← Landing pane (hotkey glance, recent row, first-run banner)
+  Home/           ← Landing pane + full recordings browser
   Recording/      ← AVAudioEngine capture, converter, hotkey routing
   Transcription/  ← FluidAudio wrapper, post-processing, model I/O
   LLM/            ← Provider-neutral HTTP client + AppleIntelligenceClient + prompts + classifier
   Articulate/     ← Selection-capture + paste-back controller (fixed and custom-instruction variants)
   Permissions/    ← Mic / input-monitoring / accessibility capability modelling
   Delivery/       ← Clipboard sandwich, synthetic paste, auto-Enter
-  Library/        ← SwiftData models + recordings UI
+  Library/        ← SwiftData models + recordings UI/state used by Home
   Settings/       ← SwiftUI Settings scene panes
   SetupWizard/    ← First-run flow window
   Sounds/         ← Chime assets + AVAudioPlayer helper
   Help/           ← In-app Help tab (Basics / Advanced / Troubleshooting cards + visuals)
-Resources/        ← Assets.xcassets, Info.plist, Jot.entitlements
+  Donation/       ← Support / donate surface
+  Privacy/        ← Privacy-scan flows for logs and exports
+  Vocabulary/     ← Custom vocabulary storage + rescoring helpers
+Resources/
+  Assets.xcassets/
+  help-content-base.md   ← checked-in grounding doc base
+  fragments/             ← generated help-doc fragments
+  help-content.md        ← generated at build time, gitignored
+  Info.plist
+  Jot.entitlements
+tools/
+  generate-fragments.swift
+  concat-help-content.swift
+  check-help-doc-budget.swift
 docs/             ← Requirements, feature inventory, plans, research — read-only from code
 ```
 
@@ -69,6 +86,9 @@ Keep each folder to its single layer. Cross-layer shared types (e.g. `Recording`
 
 - **Transcription stays on-device.** Audio and transcripts never leave the Mac via the transcription path. The only automatic network calls are: the initial Parakeet model download, and the daily Sparkle update check.
 - **LLM paths are provider-neutral; Apple Intelligence is the default on macOS 26+.** Transform (cleanup) and Articulate route through whatever provider the user has selected. For fresh installs on macOS 26+, Apple Intelligence (on-device via the `FoundationModels` framework) is the default — no API key, no network, nothing leaves the Mac. Existing v1.4 users keep their configured provider unchanged (`@AppStorage` honors the stored value). Ollama remains available for users who want local-but-not-Apple. Cloud providers (OpenAI, Anthropic, Gemini) are opt-in.
+- **Ask Jot has its own provider policy.** Ask Jot defaults to Apple Intelligence at the instrumentation level. If the selected AI provider is non-Apple, Ask Jot only routes to that provider when the user explicitly enables "Allow Ask Jot to use this provider" in Settings → AI; otherwise Ask Jot remains on Apple Intelligence.
+- **Ask Jot grounding is budget-enforced at build time.** `Resources/help-content.md` is generated from `Resources/help-content-base.md` plus fragments by build-phase scripts in `tools/`, is gitignored, and must stay within a 1500-token budget. The current shipped grounding doc is 1015 tokens.
+- **Ask Jot post-processing is provider-agnostic.** Slug correction / injection / sharp-fix forcing / command scrubbing run on both Apple and cloud Ask Jot responses. Inline tool-calling is cloud-only. The current shipped pass lifted citation coverage from roughly 28% to roughly 61%, with sharp-fix leak coverage at 100%.
 - **No telemetry.** No analytics, crash reporting, or error pings. A privacy-conscious user with Little Snitch must see only: model download (first-run), appcast fetch (daily), and whatever LLM endpoint they explicitly configured.
 - **No accounts.** The app must be fully usable without signing in anywhere.
 - **Apple Silicon, macOS 14+.** Don't add compatibility shims for Intel or older macOS.
@@ -102,6 +122,11 @@ If a release already exists and you just need to re-upload the DMG:
 gh release upload v<version> dist/Jot.dmg --clobber --repo vineetu/JOT-Transcribe
 ```
 
+Release checks before shipping:
+
+- `help-content.md` budget check passes.
+- `HelpInfraTests.runAll()` including `InfoCircleAnchorTests` passes in `DEBUG`.
+
 ### Custom flavors
 
 To release a custom flavor (different endpoints / models / remote / tag suffix),
@@ -127,11 +152,13 @@ A lightweight checklist — keeps README, website, docs, and release notes from 
 - [ ] **`docs/design-requirements.md`** — only if the product shape or an out-of-scope line shifted.
 - [ ] **`README.md`** — add/trim the short marketing bullet if it's a headline feature.
 - [ ] **`website/index.html`** — the "Capabilities" card grid, only for headline features.
+- [ ] **`Resources/help-content.md` budget** — confirm the build-phase budget check still passes after Help / Ask Jot copy changes.
 - [ ] **Shortcuts registry** — if the feature is driven by a hotkey, register it in `Sources/Recording/Hotkeys/ShortcutNames.swift` and wire it through `HotkeyRouter`. Make sure `Esc` / cancel dispatches to it if it's cancellable.
 - [ ] **Status pill states** — if the feature has its own in-progress UI, add the state to `RecorderController.State` / `PillState` and handle it in every `switch` on those enums.
 - [ ] **Menu bar** — if it surfaces as a menu action, add it in `JotMenuBarController`.
 - [ ] **Settings pane** — add a toggle / field in the matching sidebar section (General / Transcription / Sound / AI / Shortcuts) if there's any configurability. New fields should carry an `info.circle` popover with a "Learn more →" deep-link into the Help tab.
 - [ ] **Help tab** — add prose under Basics / Advanced / Troubleshooting so the feature is discoverable in-app, and wire the Settings popover's deep-link to land on that section.
+- [ ] **Help infra tests** — in `DEBUG`, run `HelpInfraTests.runAll()` and make sure `InfoCircleAnchorTests` still resolves every deep-link anchor.
 - [ ] **Setup wizard** — only if a new permission or a new required setup step.
 
 Keep cross-cutting concerns (cancellability, pipeline states, hotkey routing) in exhaustive `switch` statements on enums — the compiler is the checklist for "did I update every site?" when a case is added.

@@ -7,7 +7,10 @@ import SwiftUI
 /// always a single state write, never ad-hoc window wrangling.
 public enum AppSidebarSelection: Hashable {
     case home
-    case library
+    /// Ask Jot — dedicated chatbot sidebar entry (macOS 26+ only; the
+    /// row stays visible but disabled on older OS / Apple Silicon Macs
+    /// without Apple Intelligence). Placed between Home and Settings.
+    case askJot
     case settings(SettingsSubsection)
     case help
     case about

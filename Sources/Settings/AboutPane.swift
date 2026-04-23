@@ -10,9 +10,19 @@ import SwiftUI
 /// user-configured LLMs are the only outbound calls from within the app).
 struct AboutPane: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.helpNavigator) private var helpNavigator
+    @Environment(\.setSidebarSelection) private var setSidebarSelection
     @State private var pendingShareAction: ShareAction?
     @State private var viewerText = ""
     @State private var isShowingLogViewer = false
+
+    /// Whether Apple Intelligence is currently available on this Mac.
+    /// Computed once on appearance; the Ask Jot row hides entirely
+    /// when unavailable per chatbot spec v5 §10. Refreshed on
+    /// `.onAppear` so toggling Apple Intelligence in System Settings
+    /// while the About pane is mounted eventually reflects on
+    /// re-open.
+    @State private var isAskJotAvailable: Bool = AppleIntelligenceClient.isAvailable
 
     /// Donation state lives here so the "Thanks for donating" line and the
     /// "N months saved" badge update without relaunching the window.
@@ -26,13 +36,24 @@ struct AboutPane: View {
     var body: some View {
         Form {
             identitySection
+            updatesSection
             visionSection
+            if isAskJotAvailable {
+                askJotSection
+            }
             donationSection
             privacySection
             troubleshootingSection
             creditSection
         }
         .formStyle(.grouped)
+        .onAppear {
+            // Re-check availability every time the About pane
+            // materializes — lets a user who enabled Apple
+            // Intelligence in System Settings see the row on their
+            // next visit.
+            isAskJotAvailable = AppleIntelligenceClient.isAvailable
+        }
         // Using `.sheet(item:)` instead of `.sheet(isPresented:)` with a
         // conditional body: guarantees the sheet is only presented when a
         // non-nil action exists, so the body can never evaluate to empty
@@ -104,6 +125,37 @@ struct AboutPane: View {
         return "Version \(short) (\(build))"
     }
 
+    private var updatesSection: some View {
+        Section {
+            Button {
+                (NSApp.delegate as? AppDelegate)?.checkForUpdates()
+            } label: {
+                HStack(alignment: .center, spacing: 14) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 28)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Check for Updates…")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.primary)
+                        Text(versionString)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Check for Updates")
+            .accessibilityHint("Checks for a newer version of Jot.")
+        }
+    }
+
     // MARK: - Vision
 
     private var visionSection: some View {
@@ -114,6 +166,49 @@ struct AboutPane: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, 2)
                 .textSelection(.enabled)
+        }
+    }
+
+    // MARK: - Ask Jot (chatbot spec v5 §10)
+
+    /// About tab entry point into Ask Jot. Routes to the `.askJot`
+    /// sidebar entry and focuses its TextField without pre-filling —
+    /// context-free entry, unlike the Basics sparkle icons which
+    /// pre-fill a hero-specific question. Hidden when Apple
+    /// Intelligence is unavailable (the pane would be disabled).
+    private var askJotSection: some View {
+        Section {
+            Button {
+                helpNavigator.focusChatInput = true
+                setSidebarSelection(.askJot)
+            } label: {
+                HStack(alignment: .center, spacing: 14) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 28)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ask Jot")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.primary)
+                        Text("Ask about any feature in plain English.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Ask Jot")
+            .accessibilityHint("Opens the Ask Jot chatbot.")
         }
     }
 
