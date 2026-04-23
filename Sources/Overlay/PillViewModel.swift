@@ -15,6 +15,7 @@ final class PillViewModel: ObservableObject {
         case hidden
         case recording(elapsed: TimeInterval)
         case transcribing
+        case condensing   // Ask Jot voice-input condensation (spec v5 §8).
         case rewriting
         case transforming
         case success(preview: String)
@@ -91,6 +92,27 @@ final class PillViewModel: ObservableObject {
         return pasteboard.setString(text, forType: .string)
     }
 
+    // MARK: - External transitions (Ask Jot voice input)
+
+    /// Show the "Condensing" pill while `ChatbotVoiceInput` runs the
+    /// Apple-Intelligence condensation step on a freshly transcribed
+    /// question. Idempotent — repeated calls stay on the condensing
+    /// state. Overrides transient success/error from prior flows so the
+    /// pill reads the current work.
+    func showCondensing() {
+        stopTick()
+        transition(to: .condensing)
+    }
+
+    /// Hide the pill if and only if it's currently showing condensing.
+    /// Called when the condensation pipeline finishes (either with the
+    /// condensed text or the silent raw-fallback).
+    func hideIfCondensing() {
+        if case .condensing = state {
+            transition(to: .hidden)
+        }
+    }
+
     // MARK: - Recorder transitions
 
     private func recorderStateChanged(_ state: RecorderController.State) {
@@ -101,7 +123,7 @@ final class PillViewModel: ObservableObject {
             // success/error, leave that alone. If we're in recording or
             // transcribing, hide (e.g. a cancel).
             switch self.state {
-            case .success, .error, .hidden, .rewriting:
+            case .success, .error, .hidden, .rewriting, .condensing:
                 break
             case .recording, .transcribing, .transforming:
                 transition(to: .hidden)
@@ -129,7 +151,7 @@ final class PillViewModel: ObservableObject {
         switch articulateState {
         case .idle:
             switch self.state {
-            case .success, .error, .hidden:
+            case .success, .error, .hidden, .condensing:
                 break
             case .recording, .transcribing, .rewriting, .transforming:
                 transition(to: .hidden)

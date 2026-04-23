@@ -6,14 +6,19 @@ import KeyboardShortcuts
 struct JotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var firstRunState = FirstRunState.shared
+    @State private var navHistory = NavigationHistory()
 
     var body: some Scene {
-        // Unified window — single destination for Home, Library, Settings,
-        // and Help. Opened from the menu bar via "Open Jot…" (or "Settings…"
+        // Unified window — single destination for Home, Settings, and Help.
+        // Opened from the menu bar via "Open Jot…" (or "Settings…"
         // with forced `.settings(.general)` selection). The legacy
         // `Settings { … }` TabView scene has been retired.
         Window("Jot", id: "jot-main") {
-            JotAppWindow()
+            JotAppWindow(
+                pipeline: appDelegate.pipeline,
+                recorder: appDelegate.recorder,
+                navigationHistory: navHistory
+            )
                 .environmentObject(firstRunState)
                 .environmentObject(appDelegate.recorder)
                 .environmentObject(appDelegate.delivery)
@@ -26,20 +31,55 @@ struct JotApp: App {
         // entry surface is the menu-bar extra + hotkeys — the top-of-
         // screen menu is a compliance requirement for a `.regular` app,
         // not a feature we want users navigating. What remains: Jot (About
-        // + Quit), File (Close Window ⌘W), Edit (copy/paste/select-all,
-        // needed inside text fields), Window (minimal, gone as much as
-        // AppKit lets us). Help is dropped — the Help tab inside the main
-        // window is the canonical help surface.
+        // + Check for Updates… + Quit), File (Close Window ⌘W), Edit
+        // (copy/paste/select-all, needed inside text fields), Window
+        // (minimal, gone as much as AppKit lets us). Help is dropped —
+        // the Help tab inside the main window is the canonical help
+        // surface.
         .commands {
-            CommandGroup(replacing: .appSettings) {}
-            CommandGroup(replacing: .newItem) {}
-            CommandGroup(replacing: .textFormatting) {}
-            CommandGroup(replacing: .toolbar) {}
-            CommandGroup(replacing: .sidebar) {}
-            CommandGroup(replacing: .windowSize) {}
-            CommandGroup(replacing: .windowArrangement) {}
-            CommandGroup(replacing: .help) {}
-            CommandGroup(replacing: .systemServices) {}
+            AppMenuCommands(appDelegate: appDelegate)
+            NavigationHistoryCommands(navHistory: navHistory)
+        }
+    }
+}
+
+private struct AppMenuCommands: Commands {
+    let appDelegate: AppDelegate
+
+    var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") {
+                appDelegate.checkForUpdates()
+            }
+        }
+        CommandGroup(replacing: .appSettings) {}
+        CommandGroup(replacing: .newItem) {}
+        CommandGroup(replacing: .textFormatting) {}
+        CommandGroup(replacing: .toolbar) {}
+        CommandGroup(replacing: .sidebar) {}
+        CommandGroup(replacing: .windowSize) {}
+        CommandGroup(replacing: .windowArrangement) {}
+        CommandGroup(replacing: .help) {}
+        CommandGroup(replacing: .systemServices) {}
+    }
+}
+
+private struct NavigationHistoryCommands: Commands {
+    @Bindable var navHistory: NavigationHistory
+
+    var body: some Commands {
+        CommandGroup(after: .sidebar) {
+            Button("Back") {
+                navHistory.goBack()
+            }
+            .keyboardShortcut("[", modifiers: .command)
+            .disabled(!navHistory.canGoBack)
+
+            Button("Forward") {
+                navHistory.goForward()
+            }
+            .keyboardShortcut("]", modifiers: .command)
+            .disabled(!navHistory.canGoForward)
         }
     }
 }

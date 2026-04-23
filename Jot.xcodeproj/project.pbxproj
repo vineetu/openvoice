@@ -10,6 +10,7 @@
 		A000000000000000000000B1 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = A000000000000000000000A1 /* FluidAudio */; };
 		A000000000000000000000B2 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = A000000000000000000000A2 /* KeyboardShortcuts */; };
 		A000000000000000000000B3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* Assets.xcassets */; };
+		A000000000000000000000B4 /* help-content.md in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000013 /* help-content.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -17,6 +18,7 @@
 		A00000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A00000000000000000000011 /* Jot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Jot.entitlements; sourceTree = "<group>"; };
 		A00000000000000000000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A00000000000000000000013 /* help-content.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "help-content.md"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -87,6 +89,7 @@
 				A00000000000000000000012 /* Assets.xcassets */,
 				A00000000000000000000010 /* Info.plist */,
 				A00000000000000000000011 /* Jot.entitlements */,
+				A00000000000000000000013 /* help-content.md */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -97,7 +100,17 @@
 		A00000000000000000000060 /* Jot */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A00000000000000000000070 /* Build configuration list for PBXNativeTarget "Jot" */;
+			/*
+			 * Build phases run top-to-bottom. The three Help-doc scripts
+			 * (generate-fragments → concat-help-content → check-help-doc-budget)
+			 * must run before the Sources compile phase so help-content.md
+			 * exists by the time any Swift reference expects it. See spec
+			 * docs/specs/jot-help-chatbot-spec-v5.md §11.
+			 */
 			buildPhases = (
+				A000000000000000000000F1 /* Generate Help Fragments */,
+				A000000000000000000000F2 /* Concat Help Content */,
+				A000000000000000000000F3 /* Check Help Doc Budget */,
 				A00000000000000000000080 /* Sources */,
 				A00000000000000000000030 /* Frameworks */,
 				A00000000000000000000081 /* Resources */,
@@ -164,10 +177,103 @@
 			buildActionMask = 2147483647;
 			files = (
 				A000000000000000000000B3 /* Assets.xcassets in Resources */,
+				A000000000000000000000B4 /* help-content.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A000000000000000000000F1 /* Generate Help Fragments */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Sources/LLM/GroundingDocFacts.swift",
+				"$(SRCROOT)/Sources/LLM/ArticulateInstructionClassifier.swift",
+				"$(SRCROOT)/tools/generate-fragments.swift",
+			);
+			name = "Generate Help Fragments";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Resources/fragments/languages.md",
+				"$(SRCROOT)/Resources/fragments/cleanup-passes.md",
+				"$(SRCROOT)/Resources/fragments/articulate-invariants.md",
+				"$(SRCROOT)/Resources/fragments/articulate-branches.md",
+				"$(SRCROOT)/Resources/fragments/retention.md",
+				"$(SRCROOT)/Resources/fragments/model-info.md",
+				"$(SRCROOT)/Resources/fragments/costs.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-toggle.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-articulate-custom.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-articulate-fixed.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-paste-last.md",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Grounding-doc pipeline step 1/3 (spec v5 §11).\n# Reads Sources/LLM/GroundingDocFacts.swift and emits markdown fragments\n# under Resources/fragments/. Gitignored outputs.\nset -e\ncd \"$SRCROOT\"\nxcrun swift tools/generate-fragments.swift\n";
+		};
+		A000000000000000000000F2 /* Concat Help Content */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Resources/help-content-base.md",
+				"$(SRCROOT)/tools/concat-help-content.swift",
+				"$(SRCROOT)/Resources/fragments/languages.md",
+				"$(SRCROOT)/Resources/fragments/cleanup-passes.md",
+				"$(SRCROOT)/Resources/fragments/articulate-invariants.md",
+				"$(SRCROOT)/Resources/fragments/articulate-branches.md",
+				"$(SRCROOT)/Resources/fragments/retention.md",
+				"$(SRCROOT)/Resources/fragments/model-info.md",
+				"$(SRCROOT)/Resources/fragments/costs.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-toggle.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-articulate-custom.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-articulate-fixed.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-paste-last.md",
+			);
+			name = "Concat Help Content";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Resources/help-content.md",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Grounding-doc pipeline step 2/3 (spec v5 §11).\n# Splices Resources/fragments/*.md into help-content-base.md and writes\n# Resources/help-content.md. Fails on unmatched <!-- FRAGMENT: name -->\n# placeholder.\nset -e\ncd \"$SRCROOT\"\nxcrun swift tools/concat-help-content.swift\n";
+		};
+		A000000000000000000000F3 /* Check Help Doc Budget */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Resources/help-content.md",
+				"$(SRCROOT)/tools/check-help-doc-budget.swift",
+			);
+			name = "Check Help Doc Budget";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Grounding-doc pipeline step 3/3 (spec v5 §11, §17 gotcha 2–3).\n# Measures token count via SystemLanguageModel.default.tokenCount(for:)\n# and fails the build if help-content.md exceeds 1500 tokens.\nset -e\ncd \"$SRCROOT\"\nxcrun swift tools/check-help-doc-budget.swift\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A00000000000000000000080 /* Sources */ = {

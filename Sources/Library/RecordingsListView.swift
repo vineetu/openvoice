@@ -2,9 +2,9 @@ import AppKit
 import SwiftData
 import SwiftUI
 
-/// The Recordings browser — date-grouped list + `searchable` toolbar + detail
-/// navigation. Keeps selection local to a `NavigationStack` so opening a
-/// recording from Home can push the detail without taking over the sidebar.
+/// Reusable recordings browser — date-grouped list + `searchable` toolbar +
+/// detail navigation. Home uses this as its primary surface and can inject
+/// optional content above the grouped recordings.
 struct RecordingsListView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.transcriber) private var transcriber
@@ -15,11 +15,21 @@ struct RecordingsListView: View {
     @State private var path: [Recording] = []
     @State private var pendingDelete: Recording?
     @State private var retranscribeError: String?
+    private let navigationTitle: String
+    private let topContent: AnyView?
 
-    /// When non-nil, we push this recording onto the stack as soon as the view
-    /// appears — lets Home deep-link into detail.
-    let pendingOpen: Recording?
-    let onConsumedPendingOpen: () -> Void
+    init(navigationTitle: String = "Recordings") {
+        self.navigationTitle = navigationTitle
+        topContent = nil
+    }
+
+    init<TopContent: View>(
+        navigationTitle: String = "Recordings",
+        @ViewBuilder topContent: () -> TopContent
+    ) {
+        self.navigationTitle = navigationTitle
+        self.topContent = AnyView(topContent())
+    }
 
     private var filtered: [Recording] {
         guard !searchText.isEmpty else { return recordings }
@@ -33,7 +43,7 @@ struct RecordingsListView: View {
     var body: some View {
         NavigationStack(path: $path) {
             list
-                .navigationTitle("Recordings")
+                .navigationTitle(navigationTitle)
                 .searchable(text: $searchText, placement: .toolbar, prompt: "Search recordings")
                 .navigationDestination(for: Recording.self) { r in
                     RecordingDetailView(recording: r)
@@ -66,21 +76,22 @@ struct RecordingsListView: View {
                 } message: {
                     Text(retranscribeError ?? "")
                 }
-                .onAppear {
-                    if let pendingOpen {
-                        path.append(pendingOpen)
-                        onConsumedPendingOpen()
-                    }
-                }
         }
     }
 
-    @ViewBuilder
     private var list: some View {
-        if filtered.isEmpty {
-            emptyState
-        } else {
-            List {
+        List {
+            if let topContent {
+                auxiliaryRow {
+                    topContent
+                }
+            }
+
+            if filtered.isEmpty {
+                auxiliaryRow {
+                    emptyState
+                }
+            } else {
                 ForEach(RecordingStore.grouped(filtered), id: \.0.id) { (group, rows) in
                     Section(group.title) {
                         ForEach(rows) { r in
@@ -99,8 +110,8 @@ struct RecordingsListView: View {
                     }
                 }
             }
-            .listStyle(.inset)
         }
+        .listStyle(.inset)
     }
 
     private var emptyState: some View {
@@ -116,8 +127,19 @@ struct RecordingsListView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(20)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .padding(.horizontal, 20)
+    }
+
+    @ViewBuilder
+    private func auxiliaryRow<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 
     private func retranscribe(_ r: Recording) {

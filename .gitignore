@@ -49,3 +49,9 @@ Spikes/
 
 # iOS work-in-progress — not ready to ship, committed in a later release
 iOS/
+
+# Grounding-doc pipeline (spec v5 §11) — fragments and concatenated doc
+# are regenerated on every build from help-content-base.md + Swift enums.
+# Keep the base prose checked in; ignore the derived outputs.
+Resources/fragments/
+Resources/help-content.md

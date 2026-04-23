@@ -8,8 +8,8 @@ import SwiftUI
 ///   • Sidebar: `AppSidebar` bound to `selection`.
 ///   • Detail: the pane for the current selection, rendered directly.
 ///     Each pane owns its own scroll behavior — `Form.grouped` for
-///     settings panes, `List` for Library, `ScrollView` for Home and
-///     Help — so the window can be freely resized by the user and the
+///     settings panes, `List` for Home, and `ScrollView` for Help —
+///     so the window can be freely resized by the user and the
 ///     content scrolls within when the window is smaller than its
 ///     natural size (`.windowResizability(.contentMinSize)` in
 ///     `JotApp.swift`).
@@ -30,44 +30,101 @@ struct JotAppWindow: View {
     @MainActor static var pendingSelection: AppSidebarSelection?
 
     @State private var selection: AppSidebarSelection
+    @State private var navHistory: NavigationHistory
 
-    init() {
+    /// Shared Help navigator. Owned at this root so every pane (Help,
+    /// Ask Jot, Settings popovers) sees the same instance — deep-link
+    /// state set by one consumer is always visible to the next one.
+    @State private var helpNavigator: HelpNavigator
+
+    /// Shared Ask Jot chatbot store. Owned at this root so the
+    /// conversation survives sidebar navigation (chatbot spec v5 §4 +
+    /// gotcha #6 — correctness-critical).
+    @State private var chatStore: HelpChatStore
+
+    /// Shared chatbot voice-input bridge. Owned at this root so the
+    /// `recorder.$state` Combine subscription persists across pane
+    /// navigation and the mutual-exclusion with global dictation stays
+    /// live the whole time the window is up.
+    @State private var voiceInput: ChatbotVoiceInput
+
+    @MainActor
+    init(pipeline: VoiceInputPipeline, recorder: RecorderController) {
+        self.init(
+            pipeline: pipeline,
+            recorder: recorder,
+            navigationHistory: NavigationHistory()
+        )
+    }
+
+    init(
+        pipeline: VoiceInputPipeline,
+        recorder: RecorderController,
+        navigationHistory: NavigationHistory
+    ) {
         let initial = JotAppWindow.pendingSelection ?? .home
         JotAppWindow.pendingSelection = nil
         _selection = State(initialValue: initial)
+        _navHistory = State(initialValue: navigationHistory)
+        // Build the store tied to the same navigator instance we own
+        // above so `ShowFeatureTool` → navigator → HelpPane routing
+        // writes/reads the same observable.
+        let nav = HelpNavigator()
+        _helpNavigator = State(initialValue: nav)
+        _chatStore = State(initialValue: HelpChatStore(navigator: nav))
+        _voiceInput = State(initialValue: ChatbotVoiceInput(pipeline: pipeline, recorder: recorder))
     }
 
     var body: some View {
         NavigationSplitView {
-            AppSidebar(selection: $selection)
+            AppSidebar(
+                selection: $selection,
+                askJotAvailable: !chatStore.isUnavailable
+            )
         } detail: {
             detail
+                .environment(\.helpNavigator, helpNavigator)
         }
+        .environment(\.navigationHistory, navHistory)
         .environment(\.setSidebarSelection) { newValue in
             selection = newValue
+        }
+        .environment(\.helpNavigator, helpNavigator)
+        .onAppear {
+            navHistory.bind(selection: $selection)
         }
         .onReceive(NotificationCenter.default.publisher(for: .jotWindowSetSidebarSelection)) { note in
             if let newSelection = note.userInfo?["selection"] as? AppSidebarSelection {
                 selection = newSelection
             }
         }
+        .onChange(of: selection) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            navHistory.pushCurrent(oldValue)
+        }
+        // Navigator-driven sidebar mutation — sparkle icons, About
+        // row, and `ShowFeatureTool` set `navigator.sidebarSelection`
+        // and we mirror that into the bound selection. Clear the
+        // navigator field after consumption so the same target
+        // re-fires cleanly next time.
+        .onChange(of: helpNavigator.sidebarSelection) { _, newValue in
+            guard let newValue else { return }
+            selection = newValue
+            helpNavigator.sidebarSelection = nil
+        }
     }
 
     // MARK: - Detail router
 
-    /// Concrete pane for the current selection.
-    ///
-    /// Pane types are owned by sibling layers (Home, Library, Settings,
-    /// Help) and are wired by the integration agent once every agent
-    /// has landed its files. The switch is exhaustive so adding a case
-    /// to `AppSidebarSelection` is a compiler-enforced TODO here.
+    /// Concrete pane for the current selection. The switch is exhaustive so
+    /// adding a case to `AppSidebarSelection` is a compiler-enforced TODO here.
     @ViewBuilder
     private var detail: some View {
         switch selection {
         case .home:
             HomePane()
-        case .library:
-            LibraryPane()
+        case .askJot:
+            AskJotView(store: chatStore, voiceInput: voiceInput)
         case .settings(let sub):
             switch sub {
             case .general:       GeneralPane()

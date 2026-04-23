@@ -36,18 +36,26 @@ struct CustomizePromptDisclosure: View {
     /// Optional info popover rendered beside the disclosure.
     let info: Info?
 
-    @State private var isExpanded: Bool = false
+    private let externalIsExpanded: Binding<Bool>?
+    @State private var localIsExpanded: Bool = false
 
-    init(label: String, text: Binding<String>, defaultValue: String, info: Info? = nil) {
+    init(
+        label: String,
+        text: Binding<String>,
+        defaultValue: String,
+        info: Info? = nil,
+        isExpanded: Binding<Bool>? = nil
+    ) {
         self.label = label
         self._text = text
         self.defaultValue = defaultValue
         self.info = info
+        self.externalIsExpanded = isExpanded
     }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            DisclosureGroup(isExpanded: $isExpanded) {
+            DisclosureGroup(isExpanded: expansionBinding) {
                 VStack(alignment: .leading, spacing: 8) {
                     TextEditor(text: $text)
                         .font(.system(.body, design: .monospaced))
@@ -72,7 +80,7 @@ struct CustomizePromptDisclosure: View {
                 .padding(.top, 4)
             } label: {
                 Button {
-                    withAnimation { isExpanded.toggle() }
+                    withAnimation { expansionBinding.wrappedValue.toggle() }
                 } label: {
                     HStack {
                         Text(label)
@@ -94,5 +102,9 @@ struct CustomizePromptDisclosure: View {
                 )
             }
         }
+    }
+
+    private var expansionBinding: Binding<Bool> {
+        externalIsExpanded ?? $localIsExpanded
     }
 }

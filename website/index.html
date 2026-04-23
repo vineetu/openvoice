@@ -323,6 +323,48 @@ footer .footer-links {
   transform: translateY(0);
 }
 
+/* Privacy details disclosure */
+.privacy-details {
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: middle;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  position: relative;
+}
+.privacy-details summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  font-size: 0.75rem;
+  line-height: 1;
+  transition: color 0.2s, border-color 0.2s;
+}
+.privacy-details summary::-webkit-details-marker { display: none; }
+.privacy-details summary::marker { content: ''; }
+.privacy-details summary:hover { color: var(--text); border-color: var(--text-secondary); }
+.privacy-details[open] summary { color: var(--text); border-color: var(--text-secondary); }
+.privacy-details .privacy-details-body {
+  display: block;
+  margin-top: 12px;
+  max-width: 560px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
 /* Responsive */
 @media (max-width: 680px) {
   .features-grid { grid-template-columns: 1fr; }
@@ -349,7 +391,7 @@ footer .footer-links {
 <header class="hero">
   <div class="container">
     <h1>Speak, and it's written.</h1>
-    <p>Native macOS dictation. Press a hotkey, speak, and text appears at your cursor. Entirely on-device. No cloud. No accounts. No telemetry.</p>
+    <p>Native macOS dictation. Press a hotkey, speak, and text appears at your cursor. on device by default &middot; no accounts &middot; no telemetry</p>
     <a href="https://github.com/vineetu/JOT-Transcribe/releases/latest/download/Jot.dmg" class="cta">Download Jot</a>
     <span class="cta-note">Apple Silicon &middot; macOS 14+  &middot; Free &amp; open source</span>
   </div>
@@ -382,8 +424,8 @@ footer .footer-links {
 <section class="features" id="features">
   <div class="container">
     <div class="section-label reveal">Capabilities</div>
-    <h2 class="section-heading reveal">Everything stays on your Mac.</h2>
-    <p class="section-sub reveal">No audio leaves the device. No cloud processing. Jot runs Parakeet on the Apple Neural Engine for fast, private transcription.</p>
+    <h2 class="section-heading reveal">Dictation and transcription happen on your Mac.<details class="privacy-details"><summary aria-label="Privacy details">&#9432;</summary><span class="privacy-details-body">Cleanup, Articulate, and Ask Jot default to Apple Intelligence on-device. If you opt into a cloud provider (OpenAI, Anthropic, Gemini, or Ollama) in Settings, the text processed by that feature is sent to that provider using your API key. Your choice, your key, your provider.</span></details></h2>
+    <p class="section-sub reveal">Audio never leaves the device. Jot runs Parakeet on the Apple Neural Engine for fast, private transcription.</p>
     <div class="features-grid">
       <div class="feature-card reveal">
         <div class="feature-icon">&nbsp;&#x1F512;</div>
@@ -397,8 +439,8 @@ footer .footer-links {
       </div>
       <div class="feature-card reveal">
         <div class="feature-icon">&nbsp;&#x270F;</div>
-        <h3>AI Rewrite</h3>
-        <p>Select text, speak an instruction, and an LLM rewrites it in place. OpenAI, Anthropic, Gemini, Vertex, or fully local via Ollama. Prompts are editable for power users.</p>
+        <h3>Articulate</h3>
+        <p>Select text, speak an instruction (or use the fixed prompt), and an LLM rewrites it in place via a global shortcut. Voice instruction or fixed prompt. Prompts are editable for power users.</p>
       </div>
       <div class="feature-card reveal">
         <div class="feature-icon">&nbsp;&#x2728;</div>
@@ -407,8 +449,18 @@ footer .footer-links {
       </div>
       <div class="feature-card reveal">
         <div class="feature-icon">&nbsp;&#x1F4DA;</div>
-        <h3>Recordings library</h3>
-        <p>Every transcription is saved with its audio. Search your history, replay recordings, rename entries, or re-transcribe with a different model.</p>
+        <h3>Home with recordings</h3>
+        <p>Banner, hotkey glance, and your full searchable recordings history &mdash; all on Home. Replay audio, rename entries, or re-transcribe with a different model.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">&nbsp;&#x2728;</div>
+        <h3>Ask Jot</h3>
+        <p>Ask anything about Jot in plain English. On-device by default; cloud providers optional.</p>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">&nbsp;&#x2601;</div>
+        <h3>Cloud providers</h3>
+        <p>OpenAI, Anthropic, Gemini, or Ollama &mdash; your key, your provider, always optional.</p>
       </div>
       <div class="feature-card reveal">
         <div class="feature-icon">&nbsp;&#x1F9ED;</div>
@@ -424,6 +476,7 @@ footer .footer-links {
     <div class="section-label reveal">Free forever</div>
     <h2 class="section-heading reveal">Dictation should be free.</h2>
     <p class="section-sub reveal">Your Mac already has the hardware to transcribe speech. Jot simply puts it to use. No subscription, no usage limits, no catch. Open source under the MIT license.</p>
+    <p class="section-sub reveal" style="margin-top: 16px; font-size: 0.9375rem;">Jot is MIT-licensed and free. Any <a href="https://jot.ideaflow.page/donations" style="color: var(--accent); text-decoration: none;">donations</a> go directly to charity.</p>
   </div>
 </section>
 
@@ -443,6 +496,7 @@ footer .footer-links {
     <div class="footer-links">
       <span>MIT License</span>
       <a href="https://github.com/vineetu/JOT-Transcribe">GitHub</a>
+      <a href="https://jot.ideaflow.page/donations/">Donations</a>
       <a href="https://ko-fi.com/vineetsriram">Buy me a coffee ☕</a>
     </div>
   </div>

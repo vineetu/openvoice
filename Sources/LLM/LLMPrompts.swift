@@ -25,6 +25,13 @@ enum TransformPrompt {
 
         Output contract: return only the cleaned text. No preamble, no "Here is the cleaned text:", no markdown fencing, no surrounding quotes, no explanation.
         """
+
+    /// Appended to cloud-provider cleanup prompts only. Frontier cloud models
+    /// (Haiku 4.5, GPT-5 Mini) handle homophone disambiguation well with this
+    /// rule. Apple Intelligence's on-device model gets WORSE with it — it
+    /// reverts correct fixes (brake→break→back to brake) and over-edits.
+    /// Never user-editable; composed at call time in `LLMClient.transform`.
+    static let homophoneRule: String = "Also fix contextually-wrong homophones where context makes the intent unambiguous (e.g., brake/break, peace/piece, their/there/they're, principal/principle). Do not guess when context is ambiguous."
 }
 
 /// Articulate prompts are structured as shared invariants + a per-branch

@@ -16,7 +16,7 @@ import Foundation
 /// branch selection only chooses which short tendency block to append
 /// to the shared invariants. If the instruction's branch is misread,
 /// the prompt still honors the literal instruction.
-enum ArticulateBranch: String, Sendable {
+enum ArticulateBranch: String, Sendable, CaseIterable {
     case voicePreserving
     case structural
     case translation

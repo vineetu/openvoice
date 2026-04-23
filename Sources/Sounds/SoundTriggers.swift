@@ -24,7 +24,11 @@ final class SoundTriggers {
     private var previousState: RecorderController.State = .idle
     private var cancellables: Set<AnyCancellable> = []
 
-    init(player: SoundPlayer = .shared) {
+    convenience init() {
+        self.init(player: .shared)
+    }
+
+    init(player: SoundPlayer) {
         self.player = player
     }
 

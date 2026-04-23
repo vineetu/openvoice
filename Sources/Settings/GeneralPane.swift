@@ -58,7 +58,7 @@ struct GeneralPane: View {
                     InfoPopoverButton(
                         title: "Launch Jot at login",
                         body: "Start Jot automatically when you log in to your Mac. When on: Jot registers as a login item and reopens in the menu bar each time you sign in.",
-                        helpAnchor: "help.general.launch-at-login"
+                        helpAnchor: "sys-launch-at-login"
                     )
                 }
                 if let loginToggleError {
@@ -95,7 +95,7 @@ struct GeneralPane: View {
                     InfoPopoverButton(
                         title: "Restart Jot",
                         body: "Fixes stuck global shortcuts by relaunching the app. If another app grabbed a hotkey while Jot was off, macOS silently prevents Jot from re-registering it — restarting re-registers cleanly. Your settings and recordings are preserved.",
-                        helpAnchor: "help.troubleshooting.hotkey-stuck"
+                        helpAnchor: "hotkey-stopped-working"
                     )
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -114,7 +114,7 @@ struct GeneralPane: View {
                     InfoPopoverButton(
                         title: "Run Setup Wizard Again",
                         body: "Relaunches the first-run onboarding flow. Useful if you want to revisit permissions, model download, or hotkey setup. You can walk through each step again without reinstalling Jot.",
-                        helpAnchor: "help.general.setup-wizard"
+                        helpAnchor: "resetting-jot"
                     )
                 }
             }

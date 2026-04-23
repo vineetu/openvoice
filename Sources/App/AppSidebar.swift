@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The unified window's left source-list.
 ///
-/// Layout order (design doc §1 + sidebar treatment in Frontend Directives):
-///   Home · Library · Settings (expanded, 5 children) · Help
+/// Layout order (design doc §1 + chatbot spec v5 §3):
+///   Home · Ask Jot · Settings (expanded, 5 children) · Help · About
 ///
 /// - Expanded by default — most "Open Jot…" clicks are settings-adjacent,
 ///   so showing the five sub-items saves a click (design doc §D, option D1).
@@ -15,6 +15,13 @@ import SwiftUI
 ///   `gearshape` so it doesn't duplicate the parent's icon.
 struct AppSidebar: View {
     @Binding var selection: AppSidebarSelection
+    /// Whether Apple Intelligence is currently available on this Mac.
+    /// When `false`, the "Ask Jot" row still renders (and is still
+    /// selectable so the pane can show its reason-specific message),
+    /// but the label paints with `.secondary` tint so the entry reads
+    /// as a subordinate/disabled affordance — matches spec §2 table:
+    /// "Sidebar item visible but muted."
+    let askJotAvailable: Bool
     @State private var settingsExpanded: Bool = true
 
     var body: some View {
@@ -22,8 +29,7 @@ struct AppSidebar: View {
             Label("Home", systemImage: "house")
                 .tag(AppSidebarSelection.home)
 
-            Label("Library", systemImage: "waveform")
-                .tag(AppSidebarSelection.library)
+            askJotRow
 
             DisclosureGroup(isExpanded: $settingsExpanded) {
                 subRow(
@@ -93,6 +99,28 @@ struct AppSidebar: View {
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
+    }
+
+    /// Ask Jot entry between Home and Settings. When Apple Intelligence
+    /// is unavailable, the label paints `.secondary` (muted) but the
+    /// row stays selectable — clicking still opens `AskJotView`, which
+    /// shows the reason-specific disabled-state message and a
+    /// "Browse the Help tab →" link.
+    @ViewBuilder
+    private var askJotRow: some View {
+        if askJotAvailable {
+            Label("Ask Jot", systemImage: "sparkles")
+                .tag(AppSidebarSelection.askJot)
+        } else {
+            Label {
+                Text("Ask Jot")
+                    .foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.secondary)
+            }
+            .tag(AppSidebarSelection.askJot)
+        }
     }
 
     /// A Settings sub-row with the subordinate-tint treatment:

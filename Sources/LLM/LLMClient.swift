@@ -621,12 +621,18 @@ actor LLMClient {
         let config = await MainActor.run {
             let c = LLMConfiguration.shared
             let p = c.provider
+            // Homophone rule appends only for cloud providers. Apple
+            // Intelligence's on-device model regresses with it (reverts
+            // correct fixes, over-edits). See TransformPrompt.homophoneRule.
+            let systemPrompt = p == .appleIntelligence
+                ? c.transformPrompt
+                : c.transformPrompt + "\n\n" + TransformPrompt.homophoneRule
             return (
                 provider: p,
                 apiKey: c.apiKey(for: p),
                 baseURL: c.effectiveBaseURL(for: p),
                 model: c.effectiveModel(for: p),
-                systemPrompt: c.transformPrompt
+                systemPrompt: systemPrompt
             )
         }
 

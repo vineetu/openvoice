@@ -40,6 +40,10 @@ struct PillView: View {
                 pillBody {
                     TranscribingContent(reduceMotion: reduceMotion)
                 }
+            case .condensing:
+                pillBody {
+                    CondensingContent(reduceMotion: reduceMotion)
+                }
             case .rewriting:
                 pillBody {
                     ArticulatingContent(reduceMotion: reduceMotion)
@@ -279,6 +283,37 @@ private struct ArticulatingContent: View {
             ThreeDotLoader(reduceMotion: reduceMotion)
             Spacer(minLength: 4)
             Text("Articulating")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(pulse && !reduceMotion ? 0.6 : 0.9))
+                .animation(
+                    reduceMotion ? nil :
+                        .easeInOut(duration: 1.0).repeatForever(autoreverses: true),
+                    value: pulse
+                )
+                .onAppear { pulse = true }
+            AppLabel()
+        }
+        .transition(.opacity.animation(.easeOut(duration: 0.14)))
+    }
+}
+
+// MARK: - Condensing (Ask Jot voice input)
+
+/// Shown while the Ask Jot voice-input pipeline is running
+/// Articulate-based condensation on the raw transcript before sending
+/// it to the chatbot. Same cadence as `TransformingContent`.
+private struct CondensingContent: View {
+    let reduceMotion: Bool
+    @State private var pulse = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: 7, height: 7)
+            ThreeDotLoader(reduceMotion: reduceMotion)
+            Spacer(minLength: 4)
+            Text("Condensing")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(pulse && !reduceMotion ? 0.6 : 0.9))
                 .animation(

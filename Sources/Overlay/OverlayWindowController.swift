@@ -137,7 +137,7 @@ final class OverlayWindowController {
     private func applyClickThrough(for state: PillViewModel.PillState) {
         guard let panel else { return }
         switch state {
-        case .hidden, .recording, .transcribing, .rewriting, .transforming:
+        case .hidden, .recording, .transcribing, .condensing, .rewriting, .transforming:
             panel.ignoresMouseEvents = true
         case .success, .error:
             panel.ignoresMouseEvents = false
