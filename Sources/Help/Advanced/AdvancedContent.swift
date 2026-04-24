@@ -110,7 +110,7 @@ enum AdvancedContent {
                 badge: "power",
                 body: "Tune the Cleanup and Articulate system prompts. Reset available.",
                 expansionProse:
-                    "Jot has two separate system prompts. Cleanup's prompt (Settings → Transcription → Customize prompt) controls how dictation transcripts get tidied up — disfluencies, punctuation, grammar. Articulate's Shared system prompt (Settings → AI → Shared system prompt) is the foundation of every rewrite, used by both Articulate (Fixed) and Articulate (Custom). Editing one does not affect the other. "
+                    "Jot has two separate system prompts. Cleanup's prompt (Settings → AI → Customize prompt) controls how dictation transcripts get tidied up — disfluencies, punctuation, grammar. Articulate's Shared system prompt (Settings → AI → Shared system prompt) is the foundation of every rewrite, used by both Articulate (Fixed) and Articulate (Custom). Editing one does not affect the other. "
                     + "\n\nOn top of the Shared system prompt, Jot appends a short branch-specific tendency chosen automatically by the intent classifier — voice-preserving, shape change, translation, or code — based on your voice instruction. The appended tendency is not user-editable. "
                     + "\n\nEvery provider uses the same two prompts, so edits here apply uniformly across Apple Intelligence, OpenAI, Anthropic, Gemini, and Ollama. Both editors ship with a Reset to default button if Articulate or Cleanup starts producing odd results."
             ),

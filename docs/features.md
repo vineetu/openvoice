@@ -153,8 +153,8 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 - Auto-paste transcription
 - Auto-press Enter after paste
 - Keep transcription in clipboard
-- Clean up transcript with AI (hidden until an LLM provider is configured in Settings → AI; reach the AI pane via the sidebar to set one up)
-- "Customize prompt" disclosure for the transcript-cleanup prompt, with "Reset to default"
+- Navigation row to Settings → AI for Cleanup, Articulate, and other AI transcription features
+- Footer note clarifying that AI-powered transcription features are configured in Settings → AI
 
 ### Vocabulary
 - **Custom vocabulary list** — a short list of user-supplied terms (product names, proper nouns, jargon) that Jot should prefer when transcribing, so names and domain words don't get misheard as their common-word neighbors.
@@ -166,6 +166,8 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 - Allow Ask Jot to use this provider (shown when the selected provider is not Apple Intelligence)
 - Base URL (left-aligned) and model — override per-provider defaults
 - API key (hidden for Ollama — local, no key required)
+- Clean up transcript with AI toggle (always visible; disabled until the provider is minimally configured)
+- "Customize prompt" disclosure for the transcript-cleanup prompt, with "Reset to default"
 - Articulate (Custom) shortcut — voice-driven rewrite
 - Articulate shortcut — applies a fixed `"Articulate this"` prompt (no voice)
 - Test Connection button — always enabled, prominent accent-tinted; shows an inline spinner during the call and a success chip afterward. Must succeed before the cleanup toggle unlocks.

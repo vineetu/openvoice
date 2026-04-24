@@ -8,6 +8,7 @@ import Foundation
 /// respects it immediately without a restart.
 enum SoundEffect: String, CaseIterable, Sendable {
     case recordingStart
+    case articulateStart
     case recordingStop
     case recordingCancel
     case transcriptionComplete
@@ -18,6 +19,7 @@ enum SoundEffect: String, CaseIterable, Sendable {
     var fileName: String {
         switch self {
         case .recordingStart: return "recording-start"
+        case .articulateStart: return "articulate-start"
         case .recordingStop: return "recording-stop"
         case .recordingCancel: return "recording-cancel"
         case .transcriptionComplete: return "transcription-complete"
@@ -30,6 +32,7 @@ enum SoundEffect: String, CaseIterable, Sendable {
     var settingsKey: String {
         switch self {
         case .recordingStart: return "jot.sound.recordingStart"
+        case .articulateStart: return "jot.sound.articulateStart"
         case .recordingStop: return "jot.sound.recordingStop"
         case .recordingCancel: return "jot.sound.recordingCancel"
         case .transcriptionComplete: return "jot.sound.transcriptionComplete"

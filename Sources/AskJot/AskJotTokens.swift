@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Editorial design tokens for the Ask Jot surface. Ask Jot has its own
-/// voice — warm paper, oxblood accent, New York serif prose — that
+/// voice — warm paper, blue accent, New York serif prose — that
 /// deliberately departs from the rest of Jot's standard macOS treatment.
 /// The rest of the app uses system accent colors and SF; Ask Jot reads as
 /// a magazine column, not a chat bubble.
@@ -61,6 +61,26 @@ enum AskJotPalette {
         }
     })
 
+    /// Slight paper-adjacent wash for assistant turns. Reads as a bounded
+    /// message without reverting to a boxed chat card.
+    static let assistantTurnTint = NSColor(name: "askJotAssistantTurnTint", dynamicProvider: { appearance in
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor(red: 0x22 / 255.0, green: 0x22 / 255.0, blue: 0x27 / 255.0, alpha: 1)
+        } else {
+            return NSColor(red: 0xF4 / 255.0, green: 0xF0 / 255.0, blue: 0xE7 / 255.0, alpha: 1)
+        }
+    })
+
+    /// Slightly cooler wash for the user margin note so both turns feel
+    /// delineated while preserving the paper palette.
+    static let userTurnTint = NSColor(name: "askJotUserTurnTint", dynamicProvider: { appearance in
+        if appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            return NSColor(red: 0x20 / 255.0, green: 0x21 / 255.0, blue: 0x26 / 255.0, alpha: 1)
+        } else {
+            return NSColor(red: 0xF1 / 255.0, green: 0xF2 / 255.0, blue: 0xF0 / 255.0, alpha: 1)
+        }
+    })
+
     // MARK: SwiftUI bridge
 
     static var paperColor: Color { Color(nsColor: paper) }
@@ -69,18 +89,25 @@ enum AskJotPalette {
     static var inkAccentColor: Color { Color(nsColor: inkAccent) }
     static var ruleColor: Color { Color(nsColor: rule) }
     static var userMarkColor: Color { Color(nsColor: userMark) }
+    static var assistantTurnTintColor: Color { Color(nsColor: assistantTurnTint) }
+    static var userTurnTintColor: Color { Color(nsColor: userTurnTint) }
 }
 
 /// Editorial typography scale. Everything Ask Jot renders lives here.
 /// Body prose is New York serif; UI chrome stays in SF Pro.
 enum AskJotType {
+    static let bodySize: CGFloat = 18.5
+    static let monoSize: CGFloat = 15.5
+    static let bodyLineSpacing: CGFloat = 3
+    static let bodyParagraphSpacing: CGFloat = 2
+
     // Assistant prose — New York serif.
-    static let body = NSFont.newYork(size: 15, weight: .regular)
-    static let bodySemibold = NSFont.newYork(size: 15, weight: .semibold)
-    static let bodyItalic = NSFont.newYork(size: 15, weight: .regular, italic: true)
+    static let body = NSFont.newYork(size: bodySize, weight: .regular)
+    static let bodySemibold = NSFont.newYork(size: bodySize, weight: .semibold)
+    static let bodyItalic = NSFont.newYork(size: bodySize, weight: .regular, italic: true)
 
     // Monospace (inline code).
-    static let mono = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+    static let mono = NSFont.monospacedSystemFont(ofSize: monoSize, weight: .medium)
 
     // Masthead & headings (serif).
     static let masthead = NSFont.newYork(size: 22, weight: .regular)
@@ -95,6 +122,20 @@ enum AskJotType {
     static let userBody = Font.system(size: 14, weight: .regular, design: .default)
     static let caption = Font.system(size: 10, weight: .regular, design: .default)
     static let subtitleItalic = Font.system(size: 11, weight: .regular, design: .serif).italic()
+}
+
+enum AskJotLayout {
+    static let readingColumnWidth: CGFloat = 620
+    static let conversationSpacing: CGFloat = 20
+    static let conversationVerticalPadding: CGFloat = 24
+    static let assistantBlockSpacing: CGFloat = 10
+    static let assistantRuleSpacing: CGFloat = 12
+    static let assistantRuleHeight: CGFloat = 32
+    static let turnCornerRadius: CGFloat = 16
+    static let turnHorizontalPadding: CGFloat = 20
+    static let turnVerticalPadding: CGFloat = 16
+    static let userTurnInset: CGFloat = 104
+    static let userTurnMaxWidth: CGFloat = 420
 }
 
 extension NSFont {
