@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The unified window's left source-list.
 ///
-/// Layout order (design doc §1 + chatbot spec v5 §3):
-///   Home · Ask Jot · Settings (expanded, 5 children) · Help · About
+/// Layout order:
+///   Home · Settings (expanded, 6 children) · Help · Ask Jot · About
 ///
 /// - Expanded by default — most "Open Jot…" clicks are settings-adjacent,
 ///   so showing the five sub-items saves a click (design doc §D, option D1).
@@ -28,8 +28,6 @@ struct AppSidebar: View {
         List(selection: $selection) {
             Label("Home", systemImage: "house")
                 .tag(AppSidebarSelection.home)
-
-            askJotRow
 
             DisclosureGroup(isExpanded: $settingsExpanded) {
                 subRow(
@@ -94,6 +92,8 @@ struct AppSidebar: View {
             Label("Help", systemImage: "questionmark.circle")
                 .tag(AppSidebarSelection.help)
 
+            askJotRow
+
             Label("About", systemImage: "info.circle")
                 .tag(AppSidebarSelection.about)
         }
@@ -101,7 +101,7 @@ struct AppSidebar: View {
         .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
     }
 
-    /// Ask Jot entry between Home and Settings. When Apple Intelligence
+    /// Ask Jot entry between Help and About. When Apple Intelligence
     /// is unavailable, the label paints `.secondary` (muted) but the
     /// row stays selectable — clicking still opens `AskJotView`, which
     /// shows the reason-specific disabled-state message and a

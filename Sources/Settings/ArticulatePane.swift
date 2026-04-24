@@ -12,6 +12,7 @@ struct ArticulatePane: View {
     @AppStorage("jot.askjot.allowCloud") private var allowCloudAskJot = false
     @Environment(\.helpNavigator) private var navigator
     @State private var apiKeyInput: String = ""
+    @State private var cleanupPromptExpanded: Bool = false
     @State private var testStatus: TestStatus = .idle
     @State private var isTesting = false
 
@@ -126,6 +127,32 @@ struct ArticulatePane: View {
                     }
                 }
 
+                Section("Cleanup") {
+                    HStack {
+                        Toggle("Clean up transcript with AI", isOn: $config.transformEnabled)
+                            .disabled(!config.isMinimallyConfigured)
+                            .help("Sends transcript text to your LLM provider to remove filler words and fix grammar. Configure a provider in AI settings.")
+                        Spacer()
+                        InfoPopoverButton(
+                            title: "Clean up transcript with AI",
+                            body: "Sends the raw transcript to your configured LLM for light cleanup — filler removal, grammar, list detection — while preserving your voice. When on: every transcript is transformed before delivery.",
+                            helpAnchor: "cleanup"
+                        )
+                    }
+                    CustomizePromptDisclosure(
+                        label: "Customize prompt",
+                        text: $config.transformPrompt,
+                        defaultValue: TransformPrompt.default,
+                        info: .init(
+                            title: "Customize prompt",
+                            body: "System prompt for Clean up transcript with AI. Tells the LLM how to polish the raw transcript — filler removal, grammar, list detection — while preserving your voice.",
+                            helpAnchor: "cleanup-prompt"
+                        ),
+                        isExpanded: $cleanupPromptExpanded
+                    )
+                    .id("cleanup-prompt")
+                }
+
                 Section("Articulate") {
                     HStack {
                         Text("Articulate (Custom)")
@@ -148,9 +175,7 @@ struct ArticulatePane: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
-                }
 
-                Section("Prompt") {
                     CustomizePromptDisclosure(
                         label: "Shared system prompt",
                         text: $config.articulatePrompt,
@@ -251,6 +276,9 @@ struct ArticulatePane: View {
               Self.supportedSettingsAnchors.contains(anchor)
         else { return }
         withAnimation {
+            if anchor == "cleanup-prompt" {
+                cleanupPromptExpanded = true
+            }
             proxy.scrollTo(anchor, anchor: .top)
         }
         navigator.clearPendingSettingsFieldAnchor()
@@ -258,6 +286,7 @@ struct ArticulatePane: View {
 
     private static let supportedSettingsAnchors: Set<String> = [
         "ai-provider",
+        "cleanup-prompt",
         "articulate-custom",
         "articulate-fixed",
     ]

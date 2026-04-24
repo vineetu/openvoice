@@ -191,6 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SoundPlayer.shared.prewarm()
         let triggers = SoundTriggers()
         triggers.start(recorder: recorder)
+        triggers.start(articulate: articulate)
         self.soundTriggers = triggers
 
         // Retention cleanup: purge on launch, hourly thereafter. Respects

@@ -134,15 +134,15 @@ struct AskJotView: View {
     private var messageScroll: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 32) {
+                VStack(alignment: .leading, spacing: AskJotLayout.conversationSpacing) {
                     ForEach(store.messages) { message in
                         MessageBubble(message: message, onOpenURL: handleAssistantLink)
                             .id(message.id)
                     }
                 }
-                .frame(maxWidth: 580, alignment: .leading)
+                .frame(maxWidth: AskJotLayout.readingColumnWidth, alignment: .leading)
                 .padding(.horizontal, 56)
-                .padding(.vertical, 32)
+                .padding(.vertical, AskJotLayout.conversationVerticalPadding)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .onChange(of: store.messages.last?.id) { _, newValue in
@@ -165,7 +165,7 @@ struct AskJotView: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: 20) {
-                // 2pt oxblood rule + headline, magazine masthead style.
+                // 2pt blue rule + headline, magazine masthead style.
                 HStack(alignment: .firstTextBaseline, spacing: 14) {
                     Rectangle()
                         .fill(AskJotPalette.inkAccentColor)
@@ -604,36 +604,44 @@ private struct MessageBubble: View {
     }
 
     private var userBubble: some View {
-        // Editorial margin-note: right-aligned SF Pro text with a 1pt
-        // gray left rule. Deliberately NOT a blue iMessage bubble — the
-        // user's question reads as an editor's query in the margin, not
-        // as a chat message.
+        // Editorial margin-note: right-aligned SF Pro text with a subtle
+        // paper wash and the existing left rule. It reads as one bounded
+        // query without becoming a glossy chat bubble.
         HStack(alignment: .top, spacing: 0) {
-            Spacer(minLength: 80)
+            Spacer(minLength: AskJotLayout.userTurnInset)
 
             Text(userAttributedContent)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.leading)
-                .padding(.leading, 14)
-                .padding(.vertical, 2)
+                .frame(maxWidth: AskJotLayout.userTurnMaxWidth, alignment: .leading)
+                .padding(.leading, 18)
+                .padding(.trailing, 18)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: AskJotLayout.turnCornerRadius, style: .continuous)
+                        .fill(AskJotPalette.userTurnTintColor)
+                )
                 .overlay(alignment: .leading) {
                     Rectangle()
                         .fill(AskJotPalette.userMarkColor)
                         .frame(width: 1)
+                        .padding(.leading, 12)
+                        .padding(.vertical, 12)
                 }
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private var assistantBlock: some View {
         // Editorial column: byline in New York small caps above, then a
-        // 2pt oxblood pull-quote rule + serif prose. No card. No border.
-        // No fill. The column sits directly on paper.
-        VStack(alignment: .leading, spacing: 14) {
+        // 2pt blue pull-quote rule + serif prose, all on a faint paper
+        // wash so one answer reads as one bounded turn.
+        VStack(alignment: .leading, spacing: AskJotLayout.assistantBlockSpacing) {
             HStack(spacing: 10) {
                 Text("ASK JOT")
-                    .font(.system(size: 10, weight: .medium, design: .serif))
-                    .tracking(1.6)
+                    .font(AskJotType.byline)
+                    .tracking(AskJotType.bylineTracking)
                     .textCase(.uppercase)
                     .foregroundStyle(AskJotPalette.inkMutedColor)
 
@@ -646,10 +654,10 @@ private struct MessageBubble: View {
             }
 
             if !message.content.isEmpty {
-                HStack(alignment: .top, spacing: 14) {
+                HStack(alignment: .top, spacing: AskJotLayout.assistantRuleSpacing) {
                     Rectangle()
                         .fill(AskJotPalette.inkAccentColor)
-                        .frame(width: 2, height: 33)
+                        .frame(width: 2, height: AskJotLayout.assistantRuleHeight)
 
                     AssistantMessageText(content: assistantAttributedContent, onOpenURL: onOpenURL)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -657,7 +665,13 @@ private struct MessageBubble: View {
                 .transition(.opacity)
             }
         }
+        .padding(.horizontal, AskJotLayout.turnHorizontalPadding)
+        .padding(.vertical, AskJotLayout.turnVerticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: AskJotLayout.turnCornerRadius, style: .continuous)
+                .fill(AskJotPalette.assistantTurnTintColor)
+        )
         .animation(.easeOut(duration: 0.22), value: message.content.isEmpty)
     }
 
@@ -716,15 +730,15 @@ private struct MessageBubble: View {
 
             var replacement = AttributedString(reference.title)
             if reference.isDeepLinkable {
-                // Feature citations render as New York italic in oxblood.
+                // Feature citations render as New York italic in blue.
                 // The italic + color shift carries the link affordance —
                 // no underline at rest (underline appears on hover via
                 // linkTextAttributes, per editorial convention).
-                replacement.font = .system(size: 15, weight: .regular, design: .serif).italic()
+                replacement.font = .system(size: AskJotType.bodySize, weight: .regular, design: .serif).italic()
                 replacement.foregroundColor = AskJotPalette.inkAccentColor
                 replacement.link = reference.url
             } else {
-                replacement.font = .system(size: 15, weight: .semibold, design: .serif)
+                replacement.font = .system(size: AskJotType.bodySize, weight: .semibold, design: .serif)
                 replacement.foregroundColor = AskJotPalette.inkColor
             }
 
@@ -808,11 +822,10 @@ private struct AssistantMessageText: NSViewRepresentable {
     private static func styled(_ content: AttributedString) -> NSAttributedString {
         let mutable = NSMutableAttributedString(attributedString: NSAttributedString(content))
         let paragraph = NSMutableParagraphStyle()
-        // Editorial leading — serif prose wants more air than sans.
-        // 7pt lineSpacing on 15pt New York yields ~22pt line-height,
-        // the Apple Notes body measure.
-        paragraph.lineSpacing = 7
-        paragraph.paragraphSpacing = 10
+        // Keep the column dense enough to feel printed, not note-like.
+        paragraph.lineSpacing = AskJotType.bodyLineSpacing
+        paragraph.paragraphSpacing = AskJotType.bodyParagraphSpacing
+        paragraph.hyphenationFactor = 0.25
         mutable.addAttribute(
             .paragraphStyle,
             value: paragraph,
@@ -820,7 +833,7 @@ private struct AssistantMessageText: NSViewRepresentable {
         )
         // Apply ink color as a BASE — walk ranges that have no
         // foregroundColor attribute set and stamp them with ink. Skips
-        // link runs (oxblood) and other explicitly-colored ranges so they
+        // link runs (blue) and other explicitly-colored ranges so they
         // keep their editorial treatment.
         let full = NSRange(location: 0, length: mutable.length)
         mutable.enumerateAttribute(.foregroundColor, in: full) { value, range, _ in
@@ -870,7 +883,7 @@ private final class LinkInterceptingTextView: NSTextView {
 }
 
 private struct StreamingIndicator: View {
-    // Editorial streaming: a single em-dash in oxblood, pulsing slowly.
+    // Editorial streaming: a single em-dash in blue, pulsing slowly.
     // Telegraph, not three-dot chat loader. No app on Earth uses this.
     @State private var pulse = false
 

@@ -429,8 +429,8 @@ enum InfoCircleAnchorRegistry {
         ("TranscriptionPane.defaultModel",                "on-device-transcription"),
         ("TranscriptionPane.autoPaste",                   "dictation"),
         ("TranscriptionPane.pressReturnAfterPasting",     "dictation"),
-        ("TranscriptionPane.cleanUpTranscriptWithAI",     "cleanup"),
-        ("TranscriptionPane.customizePrompt",             "cleanup-prompt"),
+        ("ArticulatePane.cleanUpTranscriptWithAI",        "cleanup"),
+        ("ArticulatePane.customizePrompt",                "cleanup-prompt"),
         ("TranscriptionPane.keepLastTranscriptOnClipboard", "dictation"),
 
         // ArticulatePane

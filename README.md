@@ -32,7 +32,7 @@ On first launch, a setup wizard walks you through granting three macOS permissio
 
 If permissions get into a bad state, go to **Settings → General → Reset Permissions** or **Run Setup Wizard** to redo the flow.
 
-To configure AI Rewrite or transcript cleanup, go to **Settings → AI**, pick your provider, and enter your API key (not needed for Ollama or Apple Intelligence). The cleanup toggle in **Settings → Transcription** appears as soon as a provider is configured. Ask Jot uses Apple Intelligence by default; if you switch to a non-Apple provider, you can opt that provider into Ask Jot from the same pane. Press **Test Connection** any time you want to verify reachability — it's a manual diagnostic, not a gate.
+To configure AI Rewrite or transcript cleanup, go to **Settings → AI**, pick your provider, and enter your API key (not needed for Ollama or Apple Intelligence). The cleanup toggle and prompt editor now live in **Settings → AI** alongside the provider configuration. Ask Jot uses Apple Intelligence by default; if you switch to a non-Apple provider, you can opt that provider into Ask Jot from the same pane. Press **Test Connection** any time you want to verify reachability — it's a manual diagnostic, not a gate.
 
 ## Stack
 

@@ -16,7 +16,7 @@ custom-vocabulary: short list of names, acronyms, jargon Jot prefers. Biases rec
 ## Cleanup (optional, off default)
 LLM polishes transcript. Four passes: filler removal, grammar, number normalization, structure. Voice, word choice, register preserved — not style rewrite.
 cleanup-providers: Apple Intelligence on-device, private, free — recommended for privacy. OpenAI, Anthropic, Gemini use user API key.
-cleanup-prompt: default prompt in Settings → Transcription → Customize prompt. Reset-to-default available.
+cleanup-prompt: default prompt in Settings → AI → Customize prompt. Reset-to-default available.
 Fallback: raw transcript delivered on LLM fail or 10s timeout. Raw+cleaned saved on success.
 
 ## Articulate (optional)

@@ -291,7 +291,7 @@ struct BasicsContent {
                         prose: "The default cleanup prompt removes fillers, fixes grammar and punctuation, and preserves your voice. Power users can rewrite it; a reset-to-default restores the shipped version.",
                         settingsLink: SettingsLink(
                             label: "Open in Settings",
-                            pane: .transcription,
+                            pane: .ai,
                             anchor: "cleanup-prompt"
                         )
                     )
