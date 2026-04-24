@@ -32,19 +32,21 @@ struct ArticulatePane: View {
 
     @ViewBuilder
     var body: some View {
-        #if JOT_FLAVOR_1
-        // Hard-branch: for .flavor1, render the dedicated Flavor1Pane so the
-        // generic baseURL / apiKey / model fields never appear. The Keychain
-        // API-key field at ~L112 would otherwise persist any JWT a user
-        // pasted into it — that's the invariant this branch enforces.
-        if config.provider == .flavor1 {
-            Flavor1Pane()
-                .navigationTitle("AI")
-        } else {
-            genericBody
-        }
-        #else
         genericBody
+    }
+
+    /// True when the selected provider is the flavor_1 (PFB Enterprise) build.
+    /// Returns `false` on the public build (the case doesn't exist there).
+    /// Used to swap only the provider-specific fields (baseURL/apiKey/model)
+    /// for `Flavor1Pane`, while keeping the cross-cutting UI — provider
+    /// picker, articulate/transform toggles, custom prompts, and Test
+    /// Connection — visible. The Keychain-leak risk is specific to the
+    /// generic API-key field at ~L112; the rest of the pane is safe.
+    private var isFlavor1Selected: Bool {
+        #if JOT_FLAVOR_1
+        return config.provider == .flavor1
+        #else
+        return false
         #endif
     }
 
@@ -66,7 +68,10 @@ struct ArticulatePane: View {
                         )
                     }
                     .id("ai-provider")
-                    if !isAppleIntelligenceSelected {
+                    // Flavor1 Ask Jot integration is deferred — hide the
+                    // "Allow Ask Jot to use this provider" toggle until it
+                    // ships to avoid implying support that isn't wired.
+                    if !isAppleIntelligenceSelected && !isFlavor1Selected {
                         Toggle("Allow Ask Jot to use this provider", isOn: $allowCloudAskJot)
                         Text("Sends your Ask Jot conversation and Jot's help content to the selected provider using your API key.")
                             .font(.system(size: 11))
@@ -94,7 +99,7 @@ struct ArticulatePane: View {
                                     .textSelection(.enabled)
                             }
                         }
-                    } else {
+                    } else if !isFlavor1Selected {
                         HStack {
                             TextField("Base URL (leave empty for default)", text: config.baseURLBinding(for: config.provider))
                                 .textFieldStyle(.roundedBorder)
@@ -125,7 +130,21 @@ struct ArticulatePane: View {
                     }
                 }
 
-                if config.provider != .ollama && config.provider != .appleIntelligence {
+                #if JOT_FLAVOR_1
+                // Flavor1's sign-in / endpoint / model UI lives in its own
+                // pane. Embedded here so users can still see the provider
+                // picker above (and switch back to Apple/OpenAI/etc.) and
+                // the cross-cutting toggles + prompts below.
+                if config.provider == .flavor1 {
+                    Flavor1Pane()
+                }
+                #endif
+
+                // Generic Keychain-backed API key field. Hidden for
+                // .flavor1 because that provider authenticates via JWT
+                // through Flavor1Session — pasting a JWT into this field
+                // would persist it in Keychain under the generic key path.
+                if config.provider != .ollama && config.provider != .appleIntelligence && !isFlavor1Selected {
                     Section("Authentication") {
                         HStack {
                             SecureField("API Key", text: $apiKeyInput)

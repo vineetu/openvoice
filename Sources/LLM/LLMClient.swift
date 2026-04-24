@@ -95,7 +95,7 @@ actor LLMClient {
             Follow the <instruction> above. Rewrite the <selection> and return only the rewritten text.
             """
 
-        var request = try buildRequest(
+        var request = try await buildRequest(
             provider: config.provider,
             baseURL: config.baseURL,
             apiKey: config.apiKey,
@@ -124,7 +124,7 @@ actor LLMClient {
         userPrompt: String,
         temperature: Double = 0.3,
         stream: Bool = false
-    ) throws -> URLRequest {
+    ) async throws -> URLRequest {
         switch provider {
         case .appleIntelligence:
             // Apple Intelligence is dispatched before request building.
@@ -151,7 +151,7 @@ actor LLMClient {
             )
         #if JOT_FLAVOR_1
         case .flavor1:
-            return try Flavor1Client.buildRequest(
+            return try await Flavor1Client.buildRequest(
                 baseURL: baseURL, model: model,
                 systemPrompt: systemPrompt, userPrompt: userPrompt,
                 temperature: temperature, stream: stream
@@ -677,7 +677,7 @@ actor LLMClient {
 
         let systemPrompt = config.systemPrompt
 
-        var request = try buildRequest(
+        var request = try await buildRequest(
             provider: config.provider,
             baseURL: config.baseURL,
             apiKey: config.apiKey,
@@ -719,10 +719,10 @@ actor LLMClient {
         provider: LLMProvider, baseURL: String, apiKey: String,
         model: String, systemPrompt: String, userPrompt: String,
         stream: Bool = false
-    ) throws -> URLRequest {
-        try buildRequest(provider: provider, baseURL: baseURL, apiKey: apiKey,
-                         model: model, systemPrompt: systemPrompt, userPrompt: userPrompt,
-                         stream: stream)
+    ) async throws -> URLRequest {
+        try await buildRequest(provider: provider, baseURL: baseURL, apiKey: apiKey,
+                               model: model, systemPrompt: systemPrompt, userPrompt: userPrompt,
+                               stream: stream)
     }
 
     func testParseSSEEvent(provider: LLMProvider, lines: [String]) throws -> String? {
@@ -768,7 +768,7 @@ actor LLMClient {
         }
 
         do {
-            var request = try buildRequest(
+            var request = try await buildRequest(
                 provider: config.provider,
                 baseURL: config.baseURL,
                 apiKey: config.apiKey,
