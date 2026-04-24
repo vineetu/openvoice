@@ -23,9 +23,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// SwiftData stack. Shared with the SwiftUI scene via
     /// `.modelContainer(modelContainer)` so both the UI and the
     /// `RecordingPersister` write into the same store.
+    ///
+    /// Store location is pinned to `~/Library/Application Support/Jot/default.store`
+    /// so Jot's sqlite files stay inside their own namespace rather than
+    /// littering the root of Application Support (which the unconfigured
+    /// `ModelContainer(for:)` initializer would do). This also aligns with
+    /// what `ResetActions.processPendingHardReset` already expects — the
+    /// in-app hard reset was silently failing to delete the store prior to
+    /// this change because the reset path pointed at `Jot/default.store`
+    /// while SwiftData wrote to the root.
     let modelContainer: ModelContainer = {
+        let fm = FileManager.default
+        let appSupportRoot = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let jotDir = appSupportRoot.appendingPathComponent("Jot", isDirectory: true)
+        try? fm.createDirectory(at: jotDir, withIntermediateDirectories: true)
+
+        let newURL = jotDir.appendingPathComponent("default.store")
+        let oldURL = appSupportRoot.appendingPathComponent("default.store")
+
+        // One-time migration from the pre-fix default location at the root
+        // of Application Support. Existing users keep their recording
+        // history. Runs once: subsequent launches see the new store exists
+        // and skip the move.
+        if fm.fileExists(atPath: oldURL.path), !fm.fileExists(atPath: newURL.path) {
+            for suffix in ["", "-wal", "-shm"] {
+                let src = appSupportRoot.appendingPathComponent("default.store\(suffix)")
+                let dst = jotDir.appendingPathComponent("default.store\(suffix)")
+                try? fm.moveItem(at: src, to: dst)
+            }
+        }
+
         do {
-            return try ModelContainer(for: Recording.self)
+            let config = ModelConfiguration(url: newURL)
+            return try ModelContainer(for: Recording.self, configurations: config)
         } catch {
             // Can only fail if the underlying store is unreadable — fall back
             // to an in-memory store so the rest of the app still launches
