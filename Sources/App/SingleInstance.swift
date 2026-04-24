@@ -2,8 +2,18 @@ import AppKit
 import Foundation
 
 final class SingleInstance {
-    private static let pingName = Notification.Name("com.jot.Jot.singleInstance.ping")
-    private static let pongName = Notification.Name("com.jot.Jot.singleInstance.pong")
+    /// Current build's flavor, read from Info.plist. Defaults to `"public"`
+    /// when the key is absent. Used to scope ping/pong notification names
+    /// so a differently-flavored launch doesn't get pre-empted by a running
+    /// public-flavored Jot (which would otherwise reply on the same
+    /// distributed-notification channel and force the new process to exit
+    /// before it could read its own `Info.plist`).
+    private static let flavor: String = {
+        (Bundle.main.infoDictionary?["JotFlavor"] as? String)?.lowercased() ?? "public"
+    }()
+
+    private static let pingName = Notification.Name("com.jot.Jot.\(flavor).singleInstance.ping")
+    private static let pongName = Notification.Name("com.jot.Jot.\(flavor).singleInstance.pong")
 
     private let center = DistributedNotificationCenter.default()
     private let ownPID = ProcessInfo.processInfo.processIdentifier
