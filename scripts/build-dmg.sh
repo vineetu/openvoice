@@ -97,7 +97,7 @@ xcodebuild \
     -configuration "${CONFIGURATION}" \
     -destination 'platform=macOS,arch=arm64' \
     -archivePath "${ARCHIVE_PATH}" \
-    "${ARCHIVE_EXTRA_ARGS[@]}" \
+    ${ARCHIVE_EXTRA_ARGS[@]+"${ARCHIVE_EXTRA_ARGS[@]}"} \
     archive
 
 # -----------------------------------------------------------------------------
