@@ -43,10 +43,21 @@ final class JotMenuBarController: NSObject {
     private var toggleItem: NSMenuItem?
     private var copyLastItem: NSMenuItem?
 
+    #if JOT_FLAVOR_1
+    /// Items currently splicing the flavor_1 PFB Enterprise section into the
+    /// root menu. Tracked by reference so a Combine-driven rebuild can remove
+    /// exactly those items (separator + section header + state-dependent
+    /// rows) without touching the rest of the menu.
+    private var flavor1SectionItems: [NSMenuItem] = []
+    #endif
+
     // MARK: - Subscriptions
 
     private var stateCancellable: AnyCancellable?
     private var transcriptCancellable: AnyCancellable?
+    #if JOT_FLAVOR_1
+    private var flavor1StateCancellable: AnyCancellable?
+    #endif
 
     private let log = Logger(subsystem: "com.jot.Jot", category: "MenuBar")
 
@@ -87,6 +98,18 @@ final class JotMenuBarController: NSObject {
             .sink { [weak self] transcript in
                 self?.copyLastItem?.isEnabled = (transcript?.isEmpty == false)
             }
+
+        #if JOT_FLAVOR_1
+        // Re-render the PFB section in place on every Flavor1Session state
+        // transition (signedOut → signingIn → signedIn → expired). The
+        // factory is pure and re-reads `Flavor1Session.shared.state` per
+        // call, so we just need to swap the section items.
+        flavor1StateCancellable = Flavor1Session.shared.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.rebuildFlavor1Section()
+            }
+        #endif
     }
 
     // MARK: - Menu construction
@@ -103,6 +126,16 @@ final class JotMenuBarController: NSObject {
         toggle.isEnabled = Self.toggleEnabled(for: recorder.state)
         menu.addItem(toggle)
         toggleItem = toggle
+
+        #if JOT_FLAVOR_1
+        // PFB Enterprise sign-in / refresh / disconnect section. Spliced in
+        // right under the recording toggle so the auth-state affordance is
+        // visible up high. Re-rendered on Flavor1Session state changes by
+        // `rebuildFlavor1Section` — items are tracked in
+        // `flavor1SectionItems` so the rebuild removes exactly what it
+        // inserted, without disturbing surrounding items.
+        installFlavor1Section()
+        #endif
 
         menu.addItem(.separator())
 
@@ -159,6 +192,57 @@ final class JotMenuBarController: NSObject {
 
         return menu
     }
+
+    #if JOT_FLAVOR_1
+    // MARK: - Flavor1 PFB Enterprise section
+
+    /// Inserts the PFB Enterprise section (leading separator + section header
+    /// + state-dependent rows) at the current end of the root menu. Called
+    /// once during `buildMenu()` from inside the `#if JOT_FLAVOR_1` block,
+    /// after the recording toggle item is appended.
+    private func installFlavor1Section() {
+        let separator = NSMenuItem.separator()
+        menu.addItem(separator)
+        flavor1SectionItems.append(separator)
+
+        for item in Flavor1MenuItems.items(target: self) {
+            menu.addItem(item)
+            flavor1SectionItems.append(item)
+        }
+    }
+
+    /// Removes the previously-inserted PFB section items and re-inserts a
+    /// freshly-rendered section at the same anchor point. Driven by Combine
+    /// emissions on `Flavor1Session.shared.$state`, so the menu reflects
+    /// signed-out → signing-in → signed-in → expired transitions without
+    /// requiring the user to re-open the menu.
+    private func rebuildFlavor1Section() {
+        guard let firstItem = flavor1SectionItems.first,
+              let anchorIndex = menu.items.firstIndex(of: firstItem)
+        else {
+            // Section was never installed (or already torn down) — nothing
+            // to rebuild. This branch should only fire if the menu was
+            // mutated externally; logging is unnecessary noise.
+            return
+        }
+
+        for item in flavor1SectionItems where menu.items.contains(item) {
+            menu.removeItem(item)
+        }
+        flavor1SectionItems.removeAll(keepingCapacity: true)
+
+        let separator = NSMenuItem.separator()
+        menu.insertItem(separator, at: anchorIndex)
+        flavor1SectionItems.append(separator)
+
+        var insertAt = anchorIndex + 1
+        for item in Flavor1MenuItems.items(target: self) {
+            menu.insertItem(item, at: insertAt)
+            flavor1SectionItems.append(item)
+            insertAt += 1
+        }
+    }
+    #endif
 
     // MARK: - Recent Transcriptions submenu
 
