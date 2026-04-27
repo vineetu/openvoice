@@ -138,11 +138,23 @@ func parseProviderCosts(in text: String) -> [(provider: String, cost: String)] {
 
 // MARK: - Source data
 
-guard let supportedLangBody = enumBody("SupportedLanguage", in: source) else {
-    FileHandle.standardError.write("generate-fragments: missing SupportedLanguage enum\n".data(using: .utf8)!)
+guard let v3LangBody = enumBody("Parakeetv3DetectedLanguage", in: source) else {
+    FileHandle.standardError.write("generate-fragments: missing Parakeetv3DetectedLanguage enum\n".data(using: .utf8)!)
     exit(1)
 }
-let languages = parseCases(supportedLangBody).map { $0.raw }
+let languages = parseCases(v3LangBody).map { $0.raw }
+
+guard let jotASRLangBody = enumBody("JotASRLanguage", in: source) else {
+    FileHandle.standardError.write("generate-fragments: missing JotASRLanguage enum\n".data(using: .utf8)!)
+    exit(1)
+}
+// Map symbol → user-facing label. Each `JotASRLanguage` case corresponds
+// to a Parakeet model the user can install as primary.
+let jotASRLabels: [String: String] = [
+    "english":  "English (Parakeet v3 multilingual — auto-detects 25 European languages)",
+    "japanese": "Japanese (Parakeet 0.6B JA, separate ~1.25 GB download)",
+]
+let jotASRLanguages = parseCases(jotASRLangBody).map { jotASRLabels[$0.symbol] ?? $0.symbol }
 
 guard let cleanupBody = enumBody("CleanupPass", in: source) else {
     FileHandle.standardError.write("generate-fragments: missing CleanupPass enum\n".data(using: .utf8)!)
@@ -222,6 +234,10 @@ let langList = languages.joined(separator: ", ")
 write("languages",
       "\(languages.count) European languages (\(langList))")
 
+// Jot's installable ASR models, one per supported transcription language.
+let jotASRBullets = jotASRLanguages.map { "- \($0)" }.joined(separator: "\n")
+write("jot-asr-languages", jotASRBullets)
+
 write("cleanup-passes",
       cleanupPasses.joined(separator: "; "))
 
@@ -258,5 +274,5 @@ write("default-shortcuts-articulate-custom", articulateCustom)
 write("default-shortcuts-articulate-fixed", articulateFixed)
 write("default-shortcuts-paste-last", pasteLast)
 
-let emittedCount = 10
+let emittedCount = 11
 print("generate-fragments: wrote \(emittedCount) fragments to \(fragmentsDir.path)")
