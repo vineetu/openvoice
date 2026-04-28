@@ -1,5 +1,14 @@
 import SwiftUI
 
+enum TroubleshootingCardAction: Hashable {
+    case openPrivacySettings
+    case openSettingsGeneral
+    case restartJot
+    case openSettingsAI
+    case viewLog
+    case copyLog
+}
+
 /// Data model for Troubleshooting-tab cards (spec v1 §7).
 ///
 /// Eleven cards total: 8 migrated from the old flat-grid Help pane, 3 new
@@ -11,6 +20,7 @@ import SwiftUI
 ///     budget (single sentence to a few sentences max — some migrated cards
 ///     from the old HelpPane carry longer diagnostic detail by design).
 ///   * `expansionProse` — optional longer-form guidance revealed on tap.
+///   * `inlineActions` — optional action buttons rendered inside expansion prose.
 ///   * `illustration` — a `@ViewBuilder` closure producing the card's SF
 ///     Symbol composition.
 ///
@@ -23,6 +33,7 @@ struct TroubleshootingCardData: Identifiable, HelpSearchable {
     let badge: String
     let body: String
     let expansionProse: String
+    let inlineActions: [TroubleshootingCardAction]
     let illustration: () -> AnyView
 
     init(
@@ -31,6 +42,7 @@ struct TroubleshootingCardData: Identifiable, HelpSearchable {
         badge: String,
         body: String,
         expansionProse: String,
+        inlineActions: [TroubleshootingCardAction] = [],
         @ViewBuilder illustration: @escaping () -> some View
     ) {
         self.id = id
@@ -38,6 +50,7 @@ struct TroubleshootingCardData: Identifiable, HelpSearchable {
         self.badge = badge
         self.body = body
         self.expansionProse = expansionProse
+        self.inlineActions = inlineActions
         self.illustration = { AnyView(illustration()) }
     }
 
@@ -66,7 +79,8 @@ enum TroubleshootingContent {
             expansionProse:
                 "Jot needs three core permissions plus an optional Accessibility-trust promotion. "
                 + "Deny any of them and the relevant features degrade gracefully — Jot never hard-"
-                + "blocks a workflow. Revoke in System Settings to force the re-grant flow."
+                + "blocks a workflow. Revoke in System Settings to force the re-grant flow.",
+            inlineActions: [.openPrivacySettings]
         ) {
             TSIllustration.composite(primary: "lock.shield", accent: "mic.fill")
         },
@@ -146,7 +160,8 @@ enum TroubleshootingContent {
                 + "2) Still broken? Settings → Shortcuts, clear the binding for that row and "
                 + "reassign it. 3) Still broken? Identify the conflicting app (often Raycast, "
                 + "Alfred, Keyboard Maestro, TextExpander, or something recently installed or "
-                + "updated) — change the hotkey there or pick a different combo in Jot."
+                + "updated) — change the hotkey there or pick a different combo in Jot.",
+            inlineActions: [.restartJot]
         ) {
             TSIllustration.single("arrow.clockwise.circle")
         },
@@ -162,7 +177,8 @@ enum TroubleshootingContent {
                 "Settings & Shortcuts — clears preferences and hotkey bindings only. "
                 + "Data & Recordings — wipes the entire Library plus any cached transcripts. "
                 + "Permissions — revokes Jot's access and re-runs the setup wizard. All three "
-                + "live under Settings → General → Reset."
+                + "live under Settings → General → Reset.",
+            inlineActions: [.openSettingsGeneral]
         ) {
             TSIllustration.single("arrow.counterclockwise.circle")
         },
@@ -177,7 +193,8 @@ enum TroubleshootingContent {
             expansionProse:
                 "The log bundle includes recent errors, permission state, provider configuration "
                 + "(with API keys redacted), and model download status. Review it before sending "
-                + "— nothing leaves your Mac unless you attach it yourself."
+                + "— nothing leaves your Mac unless you attach it yourself.",
+            inlineActions: [.viewLog, .copyLog]
         ) {
             TSIllustration.single("envelope")
         },
@@ -194,7 +211,8 @@ enum TroubleshootingContent {
             expansionProse:
                 "Apple Intelligence is the default on macOS 26+, but it ships disabled by default "
                 + "and requires a compatible Apple Silicon Mac. If you can't or don't want to "
-                + "enable it, OpenAI / Anthropic / Gemini / Ollama are all drop-in alternatives."
+                + "enable it, OpenAI / Anthropic / Gemini / Ollama are all drop-in alternatives.",
+            inlineActions: [.openSettingsAI]
         ) {
             TSIllustration.composite(
                 primary: "brain.head.profile",
@@ -237,7 +255,8 @@ enum TroubleshootingContent {
                 + "Editing either can introduce regressions — Reset to default restores the "
                 + "shipped text. If the defaults still misbehave, switching to a cloud provider "
                 + "(OpenAI, Anthropic, Gemini) usually resolves structural-rewrite failures on "
-                + "the on-device model."
+                + "the on-device model.",
+            inlineActions: [.openSettingsAI]
         ) {
             TSIllustration.composite(
                 primary: "pencil.and.outline",

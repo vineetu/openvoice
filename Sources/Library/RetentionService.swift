@@ -22,7 +22,10 @@ final class RetentionService {
     }
 
     func start() {
-        purgeOnce()
+        // Defer the initial purge off the launch critical path. `purgeOnce`
+        // is `@MainActor`-isolated, so it still runs on main — but it lands
+        // after the first runloop turn instead of synchronously at launch.
+        Task { @MainActor [weak self] in self?.purgeOnce() }
         // Why `Timer.scheduledTimer` rather than a repeating `Task.sleep`:
         // we want this to run on the main runloop without tying up a Task,
         // and `Timer` tolerates the app being backgrounded (missed ticks
@@ -44,7 +47,7 @@ final class RetentionService {
     }
 
     func purgeOnce() {
-        let days = UserDefaults.standard.integer(forKey: "jot.retentionDays")
+        let days = (UserDefaults.standard.object(forKey: "jot.retentionDays") as? Int) ?? 7
         guard days > 0 else { return }
 
         guard let context else { return }

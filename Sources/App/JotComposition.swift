@@ -253,6 +253,45 @@ enum JotComposition {
             }
         }
 
+        // Silent one-shot cleanup of v1.0-era orphans:
+        //  • FluidAudio model cache (~443 MB) at app-support root.
+        //  • Any default.store{,-shm,-wal} at app-support root that
+        //    pre-dated the v1→v2 SwiftData store relocation.
+        //
+        // FluidAudio cleanup is safe ONLY when a current Parakeet model
+        // (v3 or ja) is already cached at the new path
+        // (~/Library/Application Support/Jot/Models/Parakeet/).
+        // Otherwise we'd remove a v1.0 user's only model copy — current
+        // code doesn't read from FluidAudio/Models/, so they were
+        // already in 'still loading' purgatory, but removing the bytes
+        // would make that state permanent. Skipping cleanup leaves
+        // 443 MB on disk; it's the lesser evil.
+        //
+        // The migration sentinel is only set once cleanup actually runs,
+        // so a future launch (after the user redownloads via Setup
+        // Wizard / Transcription pane) will perform the cleanup.
+        let anyCurrentModelCached = ParakeetModelID.allCases.contains { ModelCache.shared.isCached($0) }
+        let didCleanup = systemServices.userDefaults.bool(forKey: "jot.migration.fluidAudioCleanupV1")
+        if !didCleanup && anyCurrentModelCached {
+            try? fm.removeItem(at: appSupportRoot.appendingPathComponent("FluidAudio"))
+            // Per-suffix orphan cleanup: only run if the main store
+            // moved successfully (proves the v1→v2 SwiftData relocation
+            // ran). Then delete any source that exists at root,
+            // independent of whether each suffix has a destination —
+            // SQLite -wal / -shm are legitimately absent on clean
+            // shutdown, so 'destination missing' doesn't mean 'don't
+            // delete the orphan source'.
+            if fm.fileExists(atPath: jotDir.appendingPathComponent("default.store").path) {
+                for suffix in ["", "-shm", "-wal"] {
+                    let src = appSupportRoot.appendingPathComponent("default.store\(suffix)")
+                    if fm.fileExists(atPath: src.path) {
+                        try? fm.removeItem(at: src)
+                    }
+                }
+            }
+            systemServices.userDefaults.set(true, forKey: "jot.migration.fluidAudioCleanupV1")
+        }
+
         let modelContainer: ModelContainer
         do {
             let config = ModelConfiguration(url: newURL)

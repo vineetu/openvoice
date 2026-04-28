@@ -58,7 +58,13 @@ struct RecordingRowView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .focused($titleFocused)
                 .onExitCommand { cancelTitle() }
-                .onAppear { titleFocused = true }
+                // Defer the focus mutation off the row's appear/layout
+                // pass so AppKit's NSTableView delegate finishes its work
+                // first. Setting `@FocusState` synchronously inside
+                // `.onAppear` reenters the table delegate.
+                .onAppear {
+                    DispatchQueue.main.async { titleFocused = true }
+                }
         } else {
             Text(recording.title)
                 .font(.system(size: 13, weight: .semibold))
@@ -68,12 +74,18 @@ struct RecordingRowView: View {
     }
 
     private var preview: some View {
+        // `.textSelection(.enabled)` was previously applied here. Removed
+        // because it makes every row install AppKit text-selection /
+        // first-responder machinery during the table row layout pass —
+        // a known source of "Application performed a reentrant operation
+        // in its NSTableView delegate" warnings on macOS Lists. The full
+        // transcript is selectable in `RecordingDetailView`; truncated
+        // single-line previews aren't a useful selection target anyway.
         Text(recording.transcript.isEmpty ? "(empty transcript)" : recording.transcript)
             .font(.system(size: 12))
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .truncationMode(.tail)
-            .textSelection(.enabled)
     }
 
     private func beginEditTitle() {

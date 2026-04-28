@@ -30,6 +30,7 @@ struct JotApp: App {
                     urlSession: services.urlSession,
                     appleIntelligence: services.appleIntelligence,
                     audioCapture: services.audioCapture,
+                    keychain: services.keychain,
                     llmConfiguration: services.llmConfiguration,
                     navigationHistory: navHistory
                 )

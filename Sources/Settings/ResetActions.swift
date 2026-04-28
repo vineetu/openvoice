@@ -5,29 +5,18 @@ import SwiftUI
 
 @MainActor
 enum ResetActions {
+    private static var pendingHardResetMarkerURL: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport.appendingPathComponent(".com.jot.Jot.pendingHardReset")
+    }
+
     /// Phase 4 patch round 3: `keychain` seam threaded so per-provider
     /// API key deletion routes through `KeychainStoring` (production:
     /// `LiveKeychain`; harness: `StubKeychain`) instead of the static
     /// `KeychainHelper`. Closes the Phase 3 #29 Scope-A deferral.
     static func softReset(keychain: any KeychainStoring) {
-        let defaults = UserDefaults.standard
-        var keys: [String] = [
-            "jot.llm.provider",
-            // Legacy shared-bucket keys (pre per-provider refactor). Kept in
-            // this list so reset still cleans up any stale value on a user
-            // who ran an older build.
-            "jot.llm.baseURL",
-            "jot.llm.model",
-            "jot.llm.transformPrompt",
-            "jot.llm.rewritePrompt",
-            "jot.transformEnabled"
-        ]
-        for provider in LLMConfiguration.bucketedProviders {
-            keys.append("jot.llm.\(provider.rawValue).baseURL")
-            keys.append("jot.llm.\(provider.rawValue).model")
-        }
-        for key in keys {
-            defaults.removeObject(forKey: key)
+        if let bundleID = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleID)
         }
 
         clearAPIKeys(keychain: keychain)
@@ -45,7 +34,14 @@ enum ResetActions {
     }
 
     static func hardReset(keychain: any KeychainStoring) {
-        UserDefaults.standard.set(true, forKey: "jot.pendingHardReset")
+        // Marker FILE (not UserDefaults) survives softReset's
+        // removePersistentDomain call. processPendingHardReset on
+        // next launch checks for this file and runs the wipe.
+        do {
+            try Data().write(to: pendingHardResetMarkerURL)
+        } catch {
+            Task { await ErrorLog.shared.error(component: "ResetActions", message: "hardReset failed to write marker file", context: ["error": ErrorLog.redactedAppleError(error)]) }
+        }
         softReset(keychain: keychain)
     }
 
@@ -72,18 +68,21 @@ enum ResetActions {
     }
 
     static func processPendingHardReset() {
-        guard UserDefaults.standard.bool(forKey: "jot.pendingHardReset") else { return }
-        UserDefaults.standard.removeObject(forKey: "jot.pendingHardReset")
-
         let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Jot", isDirectory: true)
+        guard fm.fileExists(atPath: pendingHardResetMarkerURL.path) else { return }
+        try? fm.removeItem(at: pendingHardResetMarkerURL)
 
-        let store = appSupport.appendingPathComponent("default.store")
-        try? fm.removeItem(at: store)
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let library = fm.urls(for: .libraryDirectory, in: .userDomainMask).first!
+        try? fm.removeItem(at: appSupport.appendingPathComponent("Jot"))
+        try? fm.removeItem(at: appSupport.appendingPathComponent("FluidAudio"))
+        try? fm.removeItem(at: appSupport.appendingPathComponent("default.store"))
         try? fm.removeItem(at: appSupport.appendingPathComponent("default.store-shm"))
         try? fm.removeItem(at: appSupport.appendingPathComponent("default.store-wal"))
-        try? fm.removeItem(at: appSupport.appendingPathComponent("Recordings", isDirectory: true))
-        try? fm.removeItem(at: appSupport.appendingPathComponent("Models", isDirectory: true))
+        try? fm.removeItem(at: library.appendingPathComponent("Logs/Jot"))
+        if let bundleID = Bundle.main.bundleIdentifier {
+            try? fm.removeItem(at: library.appendingPathComponent("Caches/\(bundleID)"))
+            try? fm.removeItem(at: library.appendingPathComponent("HTTPStorages/\(bundleID)"))
+        }
     }
 }

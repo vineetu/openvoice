@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// A single card inside the Troubleshooting grid (spec v1 §7).
@@ -15,6 +16,10 @@ struct TroubleshootingCard: View {
     let card: TroubleshootingCardData
     @Binding var isExpanded: Bool
     var isHighlighted: Bool = false
+
+    @Environment(\.setSidebarSelection) private var setSidebarSelection
+    @State private var isShowingLogViewer = false
+    @State private var viewerText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -57,6 +62,17 @@ struct TroubleshootingCard: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(.opacity.combined(with: .move(edge: .top)))
+                if !card.inlineActions.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(card.inlineActions, id: \.self) { action in
+                            actionButton(for: action)
+                        }
+                        Spacer()
+                    }
+                    .padding(.top, 4)
+                    .contentShape(Rectangle())
+                    .onTapGesture {}
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -68,11 +84,80 @@ struct TroubleshootingCard: View {
         .onTapGesture {
             withAnimation(HelpSharedStyle.expandAnimation) { isExpanded.toggle() }
         }
-        .accessibilityElement(children: .combine)
+        .sheet(isPresented: $isShowingLogViewer) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("Error Log").font(.headline)
+                    Spacer()
+                    Button("Done") { isShowingLogViewer = false }
+                        .keyboardShortcut(.defaultAction)
+                }
+                .padding(.bottom, 10)
+                ScrollView {
+                    Text(viewerText.isEmpty ? "(log is empty)" : viewerText)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                }
+                .background(Color(nsColor: .textBackgroundColor))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+                )
+            }
+            .padding()
+            .frame(minWidth: 700, minHeight: 480)
+        }
+        .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("\(card.title). \(card.body)")
+        .accessibilityLabel(card.title)
         .accessibilityValue(isExpanded ? "expanded" : "collapsed")
         .accessibilityHint("Double-tap to \(isExpanded ? "collapse" : "expand")")
+    }
+
+    private func actionButton(for action: TroubleshootingCardAction) -> some View {
+        Button(actionTitle(for: action)) {
+            perform(action)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+    }
+
+    private func actionTitle(for action: TroubleshootingCardAction) -> String {
+        switch action {
+        case .openPrivacySettings:
+            return "Open Privacy & Security…"
+        case .openSettingsGeneral:
+            return "Open Reset settings"
+        case .restartJot:
+            return "Restart Jot"
+        case .openSettingsAI:
+            return "Open AI settings"
+        case .viewLog:
+            return "View log"
+        case .copyLog:
+            return "Copy log"
+        }
+    }
+
+    private func perform(_ action: TroubleshootingCardAction) {
+        switch action {
+        case .openPrivacySettings:
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy")!)
+        case .openSettingsGeneral:
+            setSidebarSelection(.settings(.general))
+        case .restartJot:
+            RestartHelper.relaunch()
+        case .openSettingsAI:
+            setSidebarSelection(.settings(.ai))
+        case .viewLog:
+            viewerText = logText()
+            isShowingLogViewer = true
+        case .copyLog:
+            guard let pasteboard = AppServices.live?.pasteboard else { return }
+            LogSharing.copyToClipboard(logText(), pasteboard: pasteboard)
+        }
     }
 
     private var badge: some View {
@@ -85,5 +170,9 @@ struct TroubleshootingCard: View {
                 RoundedRectangle(cornerRadius: 3)
                     .fill(Color.primary.opacity(0.06))
             )
+    }
+
+    private func logText() -> String {
+        (try? String(contentsOf: ErrorLog.logFileURL, encoding: .utf8)) ?? ""
     }
 }

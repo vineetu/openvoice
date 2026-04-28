@@ -15,7 +15,7 @@ enum ResetKind {
         switch self {
         case .soft: return "AI provider, API key, prompts, keyboard shortcuts, Setup Wizard progress"
         case .hard: return "Everything above + all recordings, transcripts, audio files, Parakeet model (~600 MB)"
-        case .permissions: return "macOS microphone, input monitoring, and accessibility grants"
+        case .permissions: return "all of Jot's macOS privacy grants"
         }
     }
 

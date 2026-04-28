@@ -8,8 +8,16 @@ import SwiftUI
 struct RecordingsListView: View {
     @Environment(\.modelContext) private var context
     @EnvironmentObject private var transcriberHolder: TranscriberHolder
-    @Query(sort: \Recording.createdAt, order: .reverse)
+    @Query(Self.recordingsDescriptor)
     private var recordings: [Recording]
+
+    private static var recordingsDescriptor: FetchDescriptor<Recording> {
+        var d = FetchDescriptor<Recording>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        d.fetchLimit = 50
+        return d
+    }
 
     @State private var searchText: String = ""
     @State private var path: [Recording] = []
@@ -31,13 +39,28 @@ struct RecordingsListView: View {
         self.topContent = AnyView(topContent())
     }
 
+    /// Result set the list renders. Empty search → the limited 50-row
+    /// `@Query` (fast launch path). Non-empty search → an unlimited
+    /// `context.fetch` so older recordings still match. The fetch is
+    /// re-issued on every keystroke; bounded by the total recordings count
+    /// (a few hundred at most), and search activates rarely enough that
+    /// the cost is acceptable. Falls back to the limited set if the
+    /// unlimited fetch throws.
     private var filtered: [Recording] {
         guard !searchText.isEmpty else { return recordings }
         let needle = searchText.lowercased()
-        return recordings.filter {
+        let pool = unlimitedFetch() ?? recordings
+        return pool.filter {
             $0.title.lowercased().contains(needle)
                 || $0.transcript.lowercased().contains(needle)
         }
+    }
+
+    private func unlimitedFetch() -> [Recording]? {
+        let descriptor = FetchDescriptor<Recording>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        return try? context.fetch(descriptor)
     }
 
     var body: some View {

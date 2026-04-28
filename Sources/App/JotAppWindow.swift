@@ -56,12 +56,14 @@ struct JotAppWindow: View {
 
     /// Phase 4 patch round 5: seams threaded into `ArticulatePane` for
     /// the Test Connection path and `GeneralPane` for the "Run Setup
-    /// Wizard Again" button. Pre-fix both panes reached `AppServices.live`
-    /// lazily on click and could trip on a fresh-install timing race;
-    /// constructor-injection mirrors Phase 3 #29.
+    /// Wizard Again" button and destructive Reset alerts. Pre-fix both
+    /// panes reached `AppServices.live` lazily on click and could trip on
+    /// a fresh-install timing race; constructor-injection mirrors Phase 3
+    /// #29.
     private let urlSession: URLSession
     private let appleIntelligence: any AppleIntelligenceClienting
     private let audioCapture: any AudioCapturing
+    private let keychain: any KeychainStoring
 
     @MainActor
     init(
@@ -70,6 +72,7 @@ struct JotAppWindow: View {
         urlSession: URLSession,
         appleIntelligence: any AppleIntelligenceClienting,
         audioCapture: any AudioCapturing,
+        keychain: any KeychainStoring,
         llmConfiguration: LLMConfiguration
     ) {
         self.init(
@@ -78,6 +81,7 @@ struct JotAppWindow: View {
             urlSession: urlSession,
             appleIntelligence: appleIntelligence,
             audioCapture: audioCapture,
+            keychain: keychain,
             llmConfiguration: llmConfiguration,
             navigationHistory: NavigationHistory()
         )
@@ -89,6 +93,7 @@ struct JotAppWindow: View {
         urlSession: URLSession,
         appleIntelligence: any AppleIntelligenceClienting,
         audioCapture: any AudioCapturing,
+        keychain: any KeychainStoring,
         llmConfiguration: LLMConfiguration,
         navigationHistory: NavigationHistory
     ) {
@@ -100,6 +105,7 @@ struct JotAppWindow: View {
         self.urlSession = urlSession
         self.appleIntelligence = appleIntelligence
         self.audioCapture = audioCapture
+        self.keychain = keychain
         // Build the store tied to the same navigator instance we own
         // above so `ShowFeatureTool` → navigator → HelpPane routing
         // writes/reads the same observable.
@@ -190,7 +196,7 @@ struct JotAppWindow: View {
             AskJotView(store: chatStore, voiceInput: voiceInput)
         case .settings(let sub):
             switch sub {
-            case .general:       GeneralPane(audioCapture: audioCapture)
+            case .general:       GeneralPane(audioCapture: audioCapture, keychain: keychain)
             case .transcription: TranscriptionPane()
             case .vocabulary:    VocabularyPane()
             case .sound:         SoundPane()

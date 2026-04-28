@@ -64,6 +64,9 @@ Sources/Private/
 # covers tenant-specific surfaces that must not ship on public `main`.
 docs/features-flavor1.md
 
+# Sony-internal announcement / share copy — not for the public remote.
+docs/sony-announce.md
+
 # scripts/agent-verify.sh per-stage build/test logs — large outputs
 # kept around for one run for debugging; never want them committed.
 .agent-verify-logs/

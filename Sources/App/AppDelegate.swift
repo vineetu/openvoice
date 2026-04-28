@@ -93,7 +93,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.windows.first?.makeKeyAndOrderFront(nil)
         }
         _ = FirstRunState.shared
-        PermissionsService.shared.refreshAll()
+        // Singleton init already triggers refreshAll() (PermissionsService.swift:59); no need to re-invoke.
+        _ = PermissionsService.shared
         // Bug: custom input device pinning records from the wrong device.
         // Force system default until fixed so previously-set UIDs don't
         // affect the recording path.
@@ -159,8 +160,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         services.recordingPersister.start()
 
         // Sound chimes: prewarm the five bundled WAVs and subscribe to
-        // recorder state so transitions fire audio cues.
-        SoundPlayer.shared.prewarm()
+        // recorder state so transitions fire audio cues. Prewarm runs on
+        // a detached utility Task so the WAV decode + AVAudioPlayer
+        // construction don't block the launch critical path.
+        Task.detached(priority: .utility) {
+            await MainActor.run { SoundPlayer.shared.prewarm() }
+        }
         services.soundTriggers.start(recorder: services.recorder)
         services.soundTriggers.start(articulate: services.articulateController)
 

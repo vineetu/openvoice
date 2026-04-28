@@ -13,19 +13,19 @@ struct GeneralPane: View {
     // button can forward the shared TranscriberHolder into the wizard.
     @EnvironmentObject private var transcriberHolder: TranscriberHolder
 
-    /// Constructor-injected `AudioCapturing` seam for the "Run Setup
-    /// Wizard Again" button. Pre-fix the action did
-    /// `guard let audio = AppServices.live?.audioCapture else { return }`
-    /// — if the live graph wasn't yet attached (race with
-    /// `applicationDidFinishLaunching`'s `AppDelegate.services` assignment
-    /// or an `NSApp.delegate` cast quirk on a fresh-install scene), the
-    /// guard silently returned and the button did nothing. Constructor
-    /// injection through `JotAppWindow`'s `.settings(.general)` route
-    /// closes the race; same pattern as Phase 4 round 5's `ArticulatePane`.
+    /// Constructor-injected seams (`audioCapture` and `keychain`) for the
+    /// destructive Reset alerts and the Run Setup Wizard button. Pre-fix
+    /// these read `AppServices.live?.X` lazily inside action closures, which
+    /// silently no-op'd if the live graph wasn't yet attached.
+    /// Constructor-injection through `JotAppWindow`'s `.settings(.general)`
+    /// route closes the race; same pattern as Phase 4 round 5's
+    /// `ArticulatePane`.
     private let audioCapture: any AudioCapturing
+    private let keychain: any KeychainStoring
 
-    init(audioCapture: any AudioCapturing) {
+    init(audioCapture: any AudioCapturing, keychain injectedKeychain: any KeychainStoring) {
         self.audioCapture = audioCapture
+        keychain = injectedKeychain
     }
 
     /// Donation reminder toggle — master switch for the Home donation
@@ -36,10 +36,7 @@ struct GeneralPane: View {
     @StateObject private var deviceWatcher = InputDeviceWatcher()
     @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
     @State private var loginToggleError: String?
-    @State private var showSoftAlert = false
-    @State private var showHardAlert = false
-    @State private var showPermissionsAlert = false
-    @State private var showRestartAlert = false
+    @State private var pendingAlert: ResetAlertKind?
     @State private var softPopover = false
     @State private var hardPopover = false
     @State private var permsPopover = false
@@ -106,7 +103,7 @@ struct GeneralPane: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Restart…") { showRestartAlert = true }
+                    Button("Restart…") { pendingAlert = .restart }
                     InfoPopoverButton(
                         title: "Restart Jot",
                         body: "Fixes stuck global shortcuts by relaunching the app. If another app grabbed a hotkey while Jot was off, macOS silently prevents Jot from re-registering it — restarting re-registers cleanly. Your settings and recordings are preserved.",
@@ -143,21 +140,24 @@ struct GeneralPane: View {
                     title: "Reset settings…",
                     caption: "Clears your preferences, API keys, and shortcuts. Keeps your recordings.",
                     popover: $softPopover,
-                    alert: $showSoftAlert
+                    pendingAlert: $pendingAlert,
+                    alertKind: .soft
                 )
                 resetRow(
                     kind: .hard,
                     title: "Erase all data…",
                     caption: "Removes recordings, the transcription model, and all settings.",
                     popover: $hardPopover,
-                    alert: $showHardAlert
+                    pendingAlert: $pendingAlert,
+                    alertKind: .hard
                 )
                 resetRow(
                     kind: .permissions,
                     title: "Reset permissions…",
-                    caption: "Re-asks macOS for microphone, input monitoring, and accessibility.",
+                    caption: "Re-asks for all of Jot's macOS privacy grants.",
                     popover: $permsPopover,
-                    alert: $showPermissionsAlert
+                    pendingAlert: $pendingAlert,
+                    alertKind: .permissions
                 )
             }
 
@@ -177,35 +177,43 @@ struct GeneralPane: View {
             }
         }
         .formStyle(.grouped)
-        .alert("Reset settings?", isPresented: $showSoftAlert) {
-            Button("Reset and Relaunch", role: .destructive) {
-                guard let keychain = AppServices.live?.keychain else { return }
-                ResetActions.softReset(keychain: keychain)
+        .alert(item: $pendingAlert) { kind in
+            switch kind {
+            case .soft:
+                return Alert(
+                    title: Text("Reset settings?"),
+                    message: Text("Clears your preferences, API keys, and shortcuts. Your recordings and downloaded model stay. Jot will relaunch into setup."),
+                    primaryButton: .destructive(Text("Reset and Relaunch")) {
+                        ResetActions.softReset(keychain: self.keychain)
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .hard:
+                return Alert(
+                    title: Text("Erase all Jot data?"),
+                    message: Text("Deletes every recording, the transcription model (≈600 MB, re-downloads on next launch), and all settings. macOS permissions are untouched. Jot will relaunch into setup."),
+                    primaryButton: .destructive(Text("Erase and Relaunch")) {
+                        ResetActions.hardReset(keychain: self.keychain)
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .permissions:
+                return Alert(
+                    title: Text("Reset permissions?"),
+                    message: Text("Revokes all of Jot's macOS privacy grants so macOS re-asks on next launch. Your recordings and settings stay. Jot will relaunch."),
+                    primaryButton: .destructive(Text("Reset and Relaunch")) {
+                        ResetActions.resetPermissions()
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .restart:
+                return Alert(
+                    title: Text("Restart Jot?"),
+                    message: Text("Jot will quit and reopen, re-registering global shortcuts from scratch. Your settings and recordings are preserved."),
+                    primaryButton: .default(Text("Restart")) { RestartHelper.relaunch() },
+                    secondaryButton: .cancel()
+                )
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Clears your preferences, API keys, and shortcuts. Your recordings and downloaded model stay. Jot will relaunch into setup.")
-        }
-        .alert("Erase all Jot data?", isPresented: $showHardAlert) {
-            Button("Erase and Relaunch", role: .destructive) {
-                guard let keychain = AppServices.live?.keychain else { return }
-                ResetActions.hardReset(keychain: keychain)
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Deletes every recording, the transcription model (≈600 MB, re-downloads on next launch), and all settings. macOS permissions are untouched. Jot will relaunch into setup.")
-        }
-        .alert("Reset permissions?", isPresented: $showPermissionsAlert) {
-            Button("Reset and Relaunch", role: .destructive) { ResetActions.resetPermissions() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Revokes Jot's microphone, input monitoring, and accessibility grants so macOS re-asks on next launch. Your recordings and settings stay. Jot will relaunch.")
-        }
-        .alert("Restart Jot?", isPresented: $showRestartAlert) {
-            Button("Restart") { RestartHelper.relaunch() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Jot will quit and reopen, re-registering global shortcuts from scratch. Your settings and recordings are preserved.")
         }
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -221,7 +229,8 @@ struct GeneralPane: View {
         title: String,
         caption: String,
         popover: Binding<Bool>,
-        alert: Binding<Bool>
+        pendingAlert: Binding<ResetAlertKind?>,
+        alertKind: ResetAlertKind
     ) -> some View {
         // Color carries the signal: blue (accent) for recoverable resets,
         // red for the only irreversible action. Matches the iOS Settings
@@ -232,7 +241,7 @@ struct GeneralPane: View {
         let titleColor: Color = isIrreversible ? .red : .accentColor
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Button {
-                alert.wrappedValue = true
+                pendingAlert.wrappedValue = alertKind
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -272,6 +281,11 @@ struct GeneralPane: View {
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }
     }
+}
+
+private enum ResetAlertKind: Identifiable {
+    case soft, hard, permissions, restart
+    var id: Self { self }
 }
 
 @MainActor
