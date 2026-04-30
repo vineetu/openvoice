@@ -45,17 +45,37 @@ final class SetupWizardCoordinator: ObservableObject {
     /// `AudioCapture()` directly, bypassing the seam.
     let audioCapture: any AudioCapturing
 
+    /// LLM dependencies used by `CleanupStep` and `ArticulateIntroStep`
+    /// preview demos. Coordinator-injected (rather than reached lazily
+    /// via `AppServices.live` from inside the step views) so the demo
+    /// surface can never crash on a nil-services race — the previous
+    /// pattern guarded with `preconditionFailure`, which compiles to a
+    /// hard `brk #1` trap in release and took the whole app down when
+    /// the live graph wasn't visible from the wizard window's view tree.
+    let urlSession: URLSession
+    let appleIntelligence: any AppleIntelligenceClienting
+    let llmConfiguration: LLMConfiguration
+    let logSink: any LogSink
+
     private let onFinish: () -> Void
 
     init(
         startingAt step: WizardStepID = .welcome,
         transcriberHolder: TranscriberHolder,
         audioCapture: any AudioCapturing,
+        urlSession: URLSession,
+        appleIntelligence: any AppleIntelligenceClienting,
+        llmConfiguration: LLMConfiguration,
+        logSink: any LogSink = ErrorLog.shared,
         onFinish: @escaping () -> Void
     ) {
         self.currentStep = step
         self.transcriberHolder = transcriberHolder
         self.audioCapture = audioCapture
+        self.urlSession = urlSession
+        self.appleIntelligence = appleIntelligence
+        self.llmConfiguration = llmConfiguration
+        self.logSink = logSink
         self.onFinish = onFinish
     }
 

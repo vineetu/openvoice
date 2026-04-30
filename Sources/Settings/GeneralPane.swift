@@ -22,10 +22,26 @@ struct GeneralPane: View {
     /// `ArticulatePane`.
     private let audioCapture: any AudioCapturing
     private let keychain: any KeychainStoring
+    /// LLM seams forwarded into `WizardPresenter.present(...)` so the
+    /// Cleanup / Articulate-intro preview demos can resolve a real
+    /// `AIService` from coordinator-injected deps. Plumbed in from
+    /// `JotAppWindow` (which already holds them for `ArticulatePane`).
+    private let urlSession: URLSession
+    private let appleIntelligence: any AppleIntelligenceClienting
+    private let llmConfiguration: LLMConfiguration
 
-    init(audioCapture: any AudioCapturing, keychain injectedKeychain: any KeychainStoring) {
+    init(
+        audioCapture: any AudioCapturing,
+        keychain injectedKeychain: any KeychainStoring,
+        urlSession: URLSession,
+        appleIntelligence: any AppleIntelligenceClienting,
+        llmConfiguration: LLMConfiguration
+    ) {
         self.audioCapture = audioCapture
         keychain = injectedKeychain
+        self.urlSession = urlSession
+        self.appleIntelligence = appleIntelligence
+        self.llmConfiguration = llmConfiguration
     }
 
     /// Donation reminder toggle — master switch for the Home donation
@@ -123,7 +139,10 @@ struct GeneralPane: View {
                         WizardPresenter.present(
                             reason: .manualFromSettings,
                             transcriberHolder: transcriberHolder,
-                            audioCapture: audioCapture
+                            audioCapture: audioCapture,
+                            urlSession: urlSession,
+                            appleIntelligence: appleIntelligence,
+                            llmConfiguration: llmConfiguration
                         )
                     }
                     InfoPopoverButton(

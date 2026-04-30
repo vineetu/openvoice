@@ -37,7 +37,11 @@ extension JotHarness {
         let coordinator = SetupWizardCoordinator(
             startingAt: .welcome,
             transcriberHolder: services.transcriberHolder,
-            audioCapture: services.audioCapture
+            audioCapture: services.audioCapture,
+            urlSession: services.urlSession,
+            appleIntelligence: services.appleIntelligence,
+            llmConfiguration: services.llmConfiguration,
+            logSink: services.logSink
         ) {
             didFinish = true
         }

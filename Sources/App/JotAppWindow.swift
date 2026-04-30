@@ -197,7 +197,13 @@ struct JotAppWindow: View {
             AskJotView(store: chatStore, voiceInput: voiceInput)
         case .settings(let sub):
             switch sub {
-            case .general:       GeneralPane(audioCapture: audioCapture, keychain: keychain)
+            case .general:       GeneralPane(
+                                    audioCapture: audioCapture,
+                                    keychain: keychain,
+                                    urlSession: urlSession,
+                                    appleIntelligence: appleIntelligence,
+                                    llmConfiguration: llmConfiguration
+                                )
             case .transcription: TranscriptionPane()
             case .vocabulary:    VocabularyPane()
             case .sound:         SoundPane()

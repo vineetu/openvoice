@@ -216,7 +216,11 @@ struct Phase4PatchRegressionTests {
         let coordinator = SetupWizardCoordinator(
             startingAt: .welcome,
             transcriberHolder: harness.services.transcriberHolder,
-            audioCapture: harness.services.audioCapture
+            audioCapture: harness.services.audioCapture,
+            urlSession: harness.services.urlSession,
+            appleIntelligence: harness.services.appleIntelligence,
+            llmConfiguration: harness.services.llmConfiguration,
+            logSink: harness.services.logSink
         ) {}
 
         // Identity check: the coordinator must surface the harness's

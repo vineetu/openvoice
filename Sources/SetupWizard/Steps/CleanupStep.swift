@@ -24,18 +24,20 @@ struct CleanupStep: View {
     @State private var cleanedText: String = ""
     @State private var errorMessage: String?
 
-    /// Resolved lazily from `AppServices.live` so the view picks up the
-    /// shared seam URLSession (Phase 0.5). The wizard step is presented
-    /// well after `applicationDidFinishLaunching` finishes assigning
-    /// `services`, so the live AppServices is always available here.
-    private var llm: LLMClient {
-        guard let services = AppServices.live else {
-            preconditionFailure("AppServices not yet resolved — wizard step presented before applicationDidFinishLaunching")
-        }
-        return LLMClient(
-            session: services.urlSession,
-            appleClient: services.appleIntelligence,
-            llmConfiguration: services.llmConfiguration
+    /// LLM dispatch resolved from coordinator-injected deps (set up by
+    /// `WizardPresenter.present(...)`). Replaces the previous lazy
+    /// `AppServices.live` reach + `preconditionFailure`, which compiled
+    /// to a hard `brk #1` trap in release and took the whole app down
+    /// when the live graph wasn't visible from the wizard window's view
+    /// tree. Resolved per-call inside `runPreview()` so a Settings-side
+    /// provider switch mid-wizard takes effect on the next press without
+    /// re-presenting.
+    private func resolveAIService() -> any AIService {
+        AIServices.current(
+            configuration: coordinator.llmConfiguration,
+            urlSession: coordinator.urlSession,
+            appleClient: coordinator.appleIntelligence,
+            logSink: coordinator.logSink
         )
     }
 
@@ -151,9 +153,10 @@ struct CleanupStep: View {
         phase = .loading
         cleanedText = ""
         errorMessage = nil
+        let service = resolveAIService()
         Task {
             do {
-                let result = try await llm.transform(transcript: transcript)
+                let result = try await service.transform(transcript: transcript)
                 await MainActor.run {
                     cleanedText = result
                     phase = .success

@@ -26,11 +26,21 @@ enum WizardPresenter {
     /// on the first hotkey press, and `ModelStep` mutates the same
     /// active-model state Settings reads. The `audioCapture` seam is the
     /// production capture instance (or harness stub) — `TestStep`'s
-    /// 3-second smoke test records through it.
+    /// 3-second smoke test records through it. The LLM seams
+    /// (`urlSession`, `appleIntelligence`, `llmConfiguration`) are
+    /// constructor-injected here so the Cleanup and Articulate intro
+    /// preview steps can route through `AIServices.current(...)` without
+    /// a lazy `AppServices.live` reach (which previously trapped on
+    /// `preconditionFailure` if the live graph wasn't visible from the
+    /// wizard window's view tree).
     static func present(
         reason: PresentReason,
         transcriberHolder: TranscriberHolder,
-        audioCapture: any AudioCapturing
+        audioCapture: any AudioCapturing,
+        urlSession: URLSession,
+        appleIntelligence: any AppleIntelligenceClienting,
+        llmConfiguration: LLMConfiguration,
+        logSink: any LogSink = ErrorLog.shared
     ) {
         if let controller {
             // Already open — just bring it forward.
@@ -42,6 +52,10 @@ enum WizardPresenter {
             startingAt: .welcome,
             transcriberHolder: transcriberHolder,
             audioCapture: audioCapture,
+            urlSession: urlSession,
+            appleIntelligence: appleIntelligence,
+            llmConfiguration: llmConfiguration,
+            logSink: logSink,
             onFinish: { closeWindow() }
         )
         let wc = SetupWizardWindowController(

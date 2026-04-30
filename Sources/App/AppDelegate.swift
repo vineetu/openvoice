@@ -188,11 +188,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !FirstRunState.shared.setupComplete || missingPermissions else { return }
         let holder = services.transcriberHolder
         let audio = services.audioCapture
+        let urlSession = services.urlSession
+        let appleIntelligence = services.appleIntelligence
+        let llmConfiguration = services.llmConfiguration
+        let logSink = services.logSink
         DispatchQueue.main.async {
             WizardPresenter.present(
                 reason: .firstRun,
                 transcriberHolder: holder,
-                audioCapture: audio
+                audioCapture: audio,
+                urlSession: urlSession,
+                appleIntelligence: appleIntelligence,
+                llmConfiguration: llmConfiguration,
+                logSink: logSink
             )
         }
     }

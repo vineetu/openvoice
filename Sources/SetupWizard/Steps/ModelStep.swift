@@ -102,6 +102,11 @@ struct ModelStep: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
+            // Same reason as in `startDownload`: holder snapshot can be
+            // stale if the wizard is re-entered after a hard reset wiped
+            // the cache, or after the user downloaded the model from
+            // Settings → Transcription before reaching this step.
+            holder.refreshInstalled()
             refreshCache()
             updateChrome()
         }
@@ -236,6 +241,13 @@ struct ModelStep: View {
                 await MainActor.run {
                     isDownloading = false
                     downloadProgress = 1.0
+                    // Holder owns the canonical `installedModelIDs` set
+                    // that `coordinator.canAdvance(from: .model)` reads.
+                    // Without this refresh, the holder's snapshot taken
+                    // at app-launch (when post-Erase the cache was empty)
+                    // stays stale and Continue stays disabled even though
+                    // the file is now on disk.
+                    holder.refreshInstalled()
                     refreshCache()
                     updateChrome()
                 }
