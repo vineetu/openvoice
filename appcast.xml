@@ -3,13 +3,13 @@
     <channel>
         <title>Jot</title>
         <item>
-            <title>1.6.9</title>
-            <pubDate>Sun, 26 Apr 2026 19:02:15 -0700</pubDate>
-            <sparkle:version>73</sparkle:version>
-            <sparkle:shortVersionString>1.6.9</sparkle:shortVersionString>
+            <title>1.6.12</title>
+            <pubDate>Thu, 30 Apr 2026 18:59:59 -0700</pubDate>
+            <sparkle:version>82</sparkle:version>
+            <sparkle:shortVersionString>1.6.12</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/vineetu/JOT-Transcribe/releases/latest/download/Jot.dmg" length="3914302" type="application/octet-stream" sparkle:edSignature="Iq4fgPos8Md35hBVmNbF9afzAJy/x//Xd9l3ool/UsKYZp1z1e1nIQ2iNCluWz8rUj3hCOJXWcIn7JF0BO72Aw=="/>
+            <enclosure url="https://github.com/vineetu/JOT-Transcribe/releases/latest/download/Jot.dmg" length="3936081" type="application/octet-stream" sparkle:edSignature="I8QrH0w6Ueom4FxeA6FzQvMz6ueMuvoyJBBS71e2HToe9CmY95Nm8p54Bdly8RzphW4QF+DmDE8bh0+4yI64CA=="/>
         </item>
     </channel>
 </rss>

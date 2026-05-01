@@ -24,7 +24,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>1.6.12</string>
 	<key>CFBundleVersion</key>
-	<string>81</string>
+	<string>82</string>
 	<key>JotFlavor</key>
 	<string>public</string>
 	<key>LSApplicationCategoryType</key>
@@ -40,7 +40,7 @@
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/vineetu/JOT-Transcribe/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>XALhRbgfQ4laNkbosSzvH2E7CYSsG6+bNjrv3qfxy3k=</string>
+	<string>KZC6X1SfyPkX2OYCP6Wp05Ale/16mi4pvvCWgubLjHU=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 </dict>
