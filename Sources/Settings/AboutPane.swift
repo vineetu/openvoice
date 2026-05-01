@@ -228,14 +228,14 @@ struct AboutPane: View {
             // claim "100% goes to causes" or "personally vetted" anywhere.
             // The only true, one-sentence claim is that the fund supports
             // education.
-            Text("Jot is free. If you'd like to support it, please donate to charity through my every.org fund that supports education instead of paying me.")
+            Text("Jot is free. If you'd like to support it, please donate to one of the charities I support instead of paying me.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
 
             HStack(spacing: 10) {
-                Link(destination: URL(string: "https://www.every.org/@vineet.sriram")!) {
+                Link(destination: URL(string: "https://jot.ideaflow.page/donations")!) {
                     Label("Donate to charity", systemImage: "heart.fill")
                 }
                 .buttonStyle(.borderedProminent)

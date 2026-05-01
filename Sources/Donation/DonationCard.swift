@@ -30,13 +30,11 @@ struct DonationCard: View {
     // MARK: - Copy (spec §3, verbatim)
 
     private let headline = "Jot is free, and stays free."
-    private let pitch = "If it's earned a spot in your workflow, consider donating $1 or $2 through the every.org fund that supports education."
+    private let pitch = "If it's earned a spot in your workflow, consider donating to one of the charities I support."
 
     // MARK: - URLs (spec §3)
 
-    private static let donate1URL = URL(string: "https://www.every.org/@vineet.sriram#/donate?amount=1&frequency=ONCE")
-    private static let donate2URL = URL(string: "https://www.every.org/@vineet.sriram#/donate?amount=2&frequency=ONCE")
-    private static let donateOtherURL = URL(string: "https://www.every.org/@vineet.sriram")
+    private static let donateURL = URL(string: "https://jot.ideaflow.page/donations")
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -51,27 +49,11 @@ struct DonationCard: View {
 
             HStack(spacing: 8) {
                 Button {
-                    donate(Self.donate1URL)
+                    donate(Self.donateURL)
                 } label: {
-                    Text("Donate $1")
+                    Text("Donate to charity")
                 }
                 .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-
-                Button {
-                    donate(Self.donate2URL)
-                } label: {
-                    Text("Donate $2")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-
-                Button {
-                    donate(Self.donateOtherURL)
-                } label: {
-                    Text("Other amount")
-                }
-                .buttonStyle(.bordered)
                 .controlSize(.regular)
 
                 Spacer(minLength: 8)
