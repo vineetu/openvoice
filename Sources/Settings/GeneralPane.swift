@@ -60,19 +60,17 @@ struct GeneralPane: View {
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 8) {
-                    Text("Input device")
-                    Spacer()
-                    Text("System default")
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .help("Custom input device selection is temporarily disabled — known bug. Jot follows your macOS Sound settings default for now; a fix is coming.")
+                Picker("Input device", selection: $inputDeviceUID) {
+                    Text("System default").tag("")
+                    if !inputDeviceUID.isEmpty,
+                       !deviceWatcher.devices.contains(where: { $0.uniqueID == inputDeviceUID }) {
+                        Text("Last used (not connected)").tag(inputDeviceUID)
+                    }
+                    ForEach(deviceWatcher.devices, id: \.uniqueID) { device in
+                        Text(device.localizedName).tag(device.uniqueID)
+                    }
                 }
-                Text("Custom device selection is temporarily disabled while we fix a bug — Jot follows your macOS Sound settings default for now.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                .pickerStyle(.menu)
             }
 
             Section {
@@ -152,6 +150,7 @@ struct GeneralPane: View {
                     )
                 }
             }
+
 
             Section("Reset") {
                 resetRow(
@@ -240,9 +239,6 @@ struct GeneralPane: View {
         }
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled
-            // Bug: custom device pinning records from the wrong device.
-            // Force system default until fixed.
-            inputDeviceUID = ""
         }
     }
 
@@ -325,6 +321,7 @@ private enum ResetAlertKind: Identifiable {
 final class InputDeviceWatcher: ObservableObject {
     @Published var devices: [AVCaptureDevice] = []
     private var observer: NSObjectProtocol?
+    private var disconnectedObserver: NSObjectProtocol?
 
     init() {
         refresh()
@@ -335,10 +332,18 @@ final class InputDeviceWatcher: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.refresh() }
         }
+        disconnectedObserver = NotificationCenter.default.addObserver(
+            forName: .AVCaptureDeviceWasDisconnected,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refresh() }
+        }
     }
 
     deinit {
         if let observer { NotificationCenter.default.removeObserver(observer) }
+        if let disconnectedObserver { NotificationCenter.default.removeObserver(disconnectedObserver) }
     }
 
     private func refresh() {

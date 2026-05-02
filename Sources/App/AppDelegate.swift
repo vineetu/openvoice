@@ -103,10 +103,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = FirstRunState.shared
         // Singleton init already triggers refreshAll() (PermissionsService.swift:59); no need to re-invoke.
         _ = PermissionsService.shared
-        // Bug: custom input device pinning records from the wrong device.
-        // Force system default until fixed so previously-set UIDs don't
-        // affect the recording path.
-        UserDefaults.standard.set("", forKey: "jot.inputDeviceUID")
     }
 
     /// Pre-warm Parakeet out-of-band so the user's first recording

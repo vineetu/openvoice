@@ -20,21 +20,17 @@ struct MicrophoneStep: View {
             .textSelection(.enabled)
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text("Input device:")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                    Text("System default")
-                        .font(.system(size: 12, weight: .medium))
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                        .font(.system(size: 11))
-                        .help("Custom input device selection is temporarily disabled — known bug. Jot follows your macOS Sound settings default for now; a fix is coming.")
+                Picker("Input device:", selection: $inputDeviceUID) {
+                    Text("System default").tag("")
+                    if !inputDeviceUID.isEmpty,
+                       !deviceList.devices.contains(where: { $0.uniqueID == inputDeviceUID }) {
+                        Text("Last used (not connected)").tag(inputDeviceUID)
+                    }
+                    ForEach(deviceList.devices, id: \.uniqueID) { device in
+                        Text(device.localizedName).tag(device.uniqueID)
+                    }
                 }
-                Text("Custom device selection is temporarily disabled while we fix a bug — Jot follows your macOS Sound settings default for now.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                .pickerStyle(.menu)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -49,9 +45,6 @@ struct MicrophoneStep: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
-            // Bug: custom device pinning records from the wrong device.
-            // Force system default until fixed.
-            inputDeviceUID = ""
             deviceList.refresh()
             meter.start()
             coordinator.setChrome(WizardStepChrome(
@@ -235,6 +228,7 @@ private final class WizardInputDeviceWatcher: ObservableObject {
     @Published var devices: [AVCaptureDevice] = []
 
     private var observer: NSObjectProtocol?
+    private var disconnectedObserver: NSObjectProtocol?
 
     init() {
         observer = NotificationCenter.default.addObserver(
@@ -244,10 +238,18 @@ private final class WizardInputDeviceWatcher: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.refresh() }
         }
+        disconnectedObserver = NotificationCenter.default.addObserver(
+            forName: .AVCaptureDeviceWasDisconnected,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refresh() }
+        }
     }
 
     deinit {
         if let observer { NotificationCenter.default.removeObserver(observer) }
+        if let disconnectedObserver { NotificationCenter.default.removeObserver(disconnectedObserver) }
     }
 
     func refresh() {

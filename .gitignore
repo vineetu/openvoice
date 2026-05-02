@@ -70,3 +70,6 @@ docs/sony-announce.md
 # scripts/agent-verify.sh per-stage build/test logs — large outputs
 # kept around for one run for debugging; never want them committed.
 .agent-verify-logs/
+
+# Mic-capture sandbox apps — local debugging only, never committed.
+mic-test/
