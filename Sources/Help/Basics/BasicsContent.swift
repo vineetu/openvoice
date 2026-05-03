@@ -4,9 +4,10 @@ import SwiftUI
 
 /// Hero concept rendered at the top of each Basics section.
 ///
-/// One per hero concept (Dictation, Cleanup, Articulate). The `id` is the
+/// One per hero concept (Dictation, Cleanup, Rewrite). The `id` is the
 /// canonical slug from redesign spec §14 — `"dictation"`, `"cleanup"`,
-/// `"articulate"` — so phase1c's Feature registry and the chatbot's
+/// `"articulate"` (legacy slug preserved by rename migration to keep deep-
+/// links stable) — so phase1c's Feature registry and the chatbot's
 /// `ShowFeatureTool` land at the same anchor.
 ///
 /// `subtitle` is hard-capped at 120 characters by `BasicsContent.validate()`.
@@ -96,7 +97,7 @@ struct ConditionalAction {
 enum HeroIllustrationKind {
     case dictation
     case cleanup
-    case articulate
+    case rewrite
 }
 
 // MARK: - HelpSearchable conformance
@@ -329,22 +330,22 @@ struct BasicsContent {
             conditionalAction: nil
         ),
 
-        // ---------------- Articulate ----------------
+        // ---------------- Rewrite ----------------
 
         Hero(
             id: "articulate",
-            title: "Articulate",
+            title: "Rewrite",
             subtitle: "Optional. Select text, press a shortcut, speak an instruction or take a fixed pass — Jot rewrites in place.",
             isOptional: true,
-            illustrationKind: .articulate,
+            illustrationKind: .rewrite,
             subRows: [
                 SubRow(
                     id: "articulate-custom",
-                    name: "Articulate (Custom)",
+                    name: "Rewrite with Voice",
                     shortcutChip: ["voice"],
                     isExpandable: true,
                     detail: SubRowDetailContent(
-                        prose: "Select any text, press the shortcut, speak an instruction like 'make this formal' or 'translate to Japanese' — the articulated text replaces your selection.",
+                        prose: "Select any text, press the shortcut, speak an instruction like 'make this formal' or 'translate to Japanese' — the rewritten text replaces your selection.",
                         inlineTip: InlineTip(
                             chip: ["voice"],
                             description: "Voice-driven rewrite — unbound by default"
@@ -358,11 +359,11 @@ struct BasicsContent {
                 ),
                 SubRow(
                     id: "articulate-fixed",
-                    name: "Articulate (Fixed)",
+                    name: "Rewrite",
                     shortcutChip: nil,
                     isExpandable: true,
                     detail: SubRowDetailContent(
-                        prose: "Select text, press the shortcut, and Jot rewrites it with a fixed 'Articulate this' instruction. No voice step — useful when you just want a quick cleanup pass.",
+                        prose: "Select text, press the shortcut, and Jot rewrites it with a fixed 'Rewrite this' instruction. No voice step — useful when you just want a quick cleanup pass.",
                         settingsLink: SettingsLink(
                             label: "Open in Settings",
                             pane: .ai,

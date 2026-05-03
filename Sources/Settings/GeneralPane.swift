@@ -27,13 +27,13 @@ struct GeneralPane: View {
     /// silently no-op'd if the live graph wasn't yet attached.
     /// Constructor-injection through `JotAppWindow`'s `.settings(.general)`
     /// route closes the race; same pattern as Phase 4 round 5's
-    /// `ArticulatePane`.
+    /// `RewritePane`.
     private let audioCapture: any AudioCapturing
     private let keychain: any KeychainStoring
     /// LLM seams forwarded into `WizardPresenter.present(...)` so the
-    /// Cleanup / Articulate-intro preview demos can resolve a real
+    /// Cleanup / Rewrite-intro preview demos can resolve a real
     /// `AIService` from coordinator-injected deps. Plumbed in from
-    /// `JotAppWindow` (which already holds them for `ArticulatePane`).
+    /// `JotAppWindow` (which already holds them for `RewritePane`).
     private let urlSession: URLSession
     private let appleIntelligence: any AppleIntelligenceClienting
     private let llmConfiguration: LLMConfiguration
@@ -113,13 +113,17 @@ struct GeneralPane: View {
             }
 
             Section {
-                Picker("Keep recordings", selection: $retentionDays) {
+                // The same `jot.retentionDays` setting now governs both
+                // dictation `Recording` rows and `RewriteSession` rows in
+                // Home, so the copy is broadened to "library items"
+                // rather than the dictation-only "recordings".
+                Picker("Keep library items", selection: $retentionDays) {
                     Text("Forever").tag(0)
                     Text("7 days").tag(7)
                     Text("30 days").tag(30)
                     Text("90 days").tag(90)
                 }
-                Text("Older recordings are deleted automatically.")
+                Text("Older library items are deleted automatically.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -174,7 +178,7 @@ struct GeneralPane: View {
                 resetRow(
                     kind: .soft,
                     title: "Reset settings…",
-                    caption: "Clears your preferences, API keys, and shortcuts. Keeps your recordings.",
+                    caption: "Clears your preferences, API keys, and shortcuts. Keeps your library items.",
                     popover: $softPopover,
                     pendingAlert: $pendingAlert,
                     alertKind: .soft
@@ -182,7 +186,7 @@ struct GeneralPane: View {
                 resetRow(
                     kind: .hard,
                     title: "Erase all data…",
-                    caption: "Removes recordings, the transcription model, and all settings.",
+                    caption: "Removes all library items, the transcription model, and all settings.",
                     popover: $hardPopover,
                     pendingAlert: $pendingAlert,
                     alertKind: .hard
@@ -246,13 +250,13 @@ struct GeneralPane: View {
         } message: { kind in
             switch kind {
             case .soft:
-                Text("Clears your preferences, API keys, and shortcuts. Your recordings and downloaded model stay. Jot will relaunch into setup.")
+                Text("Clears your preferences, API keys, and shortcuts. Your library items and downloaded model stay. Jot will relaunch into setup.")
             case .hard:
-                Text("Deletes every recording, the transcription model (≈600 MB, re-downloads on next launch), and all settings. macOS permissions are untouched. Jot will relaunch into setup.")
+                Text("Deletes every library item, the transcription model (≈600 MB, re-downloads on next launch), and all settings. macOS permissions are untouched. Jot will relaunch into setup.")
             case .permissions:
-                Text("Revokes all of Jot's macOS privacy grants so macOS re-asks on next launch. Your recordings and settings stay. Jot will relaunch.")
+                Text("Revokes all of Jot's macOS privacy grants so macOS re-asks on next launch. Your library items and settings stay. Jot will relaunch.")
             case .restart:
-                Text("Jot will quit and reopen, re-registering global shortcuts from scratch. Your settings and recordings are preserved.")
+                Text("Jot will quit and reopen, re-registering global shortcuts from scratch. Your settings and library items are preserved.")
             }
         }
         .onAppear {

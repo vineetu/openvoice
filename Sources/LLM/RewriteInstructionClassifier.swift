@@ -1,7 +1,7 @@
 import Foundation
 
-/// Router that sorts a user's spoken articulate (custom) instruction into one of
-/// four branches so `LLMClient.articulate(…)` can pick a specialized system
+/// Router that sorts a user's spoken Rewrite with Voice instruction into one
+/// of four branches so `LLMClient.rewrite(…)` can pick a specialized system
 /// prompt.
 ///
 /// Deliberately regex-based and deterministic — no network, no LLM,
@@ -16,15 +16,15 @@ import Foundation
 /// branch selection only chooses which short tendency block to append
 /// to the shared invariants. If the instruction's branch is misread,
 /// the prompt still honors the literal instruction.
-enum ArticulateBranch: String, Sendable, CaseIterable {
+enum RewriteBranch: String, Sendable, CaseIterable {
     case voicePreserving
     case structural
     case translation
     case code
 }
 
-enum ArticulateInstructionClassifier {
-    static func classify(_ instruction: String) -> ArticulateBranch {
+enum RewriteInstructionClassifier {
+    static func classify(_ instruction: String) -> RewriteBranch {
         let s = instruction
             .lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)

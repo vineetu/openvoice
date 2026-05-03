@@ -176,7 +176,8 @@ final class JotHarness {
             userDefaults: Self.ephemeralUserDefaults(),
             urlSessionConfiguration: urlSessionConfig,
             notificationCenter: NotificationCenter(),
-            seamOverrides: overrides
+            seamOverrides: overrides,
+            useInMemoryModelStore: true
         )
 
         let services = try JotComposition.build(systemServices: systemServices)

@@ -1,5 +1,5 @@
 # Jot
-On-device Mac dictation. Hotkey, speak, transcript pastes at cursor. Local default; cloud optional for Cleanup, Articulate.
+On-device Mac dictation. Hotkey, speak, transcript pastes at cursor. Local default; cloud optional for Cleanup, Rewrite.
 Jot cannot transcribe pre-recorded audio files — live mic input only.
 
 Keyboard modifier glossary: ⌥=Option, ⌘=Command, ⌃=Control, ⇧=Shift.
@@ -22,10 +22,10 @@ cleanup-providers: Apple Intelligence on-device, private, free — recommended f
 cleanup-prompt: default prompt in Settings → AI → Customize prompt. Reset-to-default available.
 Fallback: raw transcript delivered on LLM fail or 10s timeout. Raw+cleaned saved on success.
 
-## Articulate (optional)
+## Rewrite (optional)
 Rewrite selected text via global shortcut. Two variants, same pipeline.
-articulate-custom: select text, hotkey (default ⌥,, Option+Comma), speak instruction ("make formal", "translate Japanese", "bulleted list"), result replaces selection.
-articulate-fixed: select text, hotkey (unbound default), fixed "Articulate this" rewrite. No voice step.
+articulate-custom: Rewrite with Voice — select text, hotkey (default ⌥,, Option+Comma), speak instruction ("make formal", "translate Japanese", "bulleted list"), result replaces selection.
+articulate-fixed: Rewrite — select text, hotkey (unbound default), fixed "Rewrite this" prompt. No voice step.
 Invariants every run: selection is text not instruction, return only rewrite, don't refuse on quality. Edit at Settings → AI → Customize prompt.
 articulate-intent-classifier: routes instruction into four branches — voice-preserving, structural, translation, code. User instruction wins; branch picks default shape.
 Both use configured AI provider (same as Cleanup).
@@ -43,7 +43,7 @@ clipboard-preservation: original clipboard restored after paste.
 copy-last: ⌥⇧V (Option+Shift+V) re-pastes most recent transcript.
 
 ## Retention
-Recordings+transcripts kept on-device, configurable. Options: 7, 30, 90 days, forever. Enforced on launch, hourly. Settings → General → Keep recordings.
+Library items (recordings + rewrite sessions) and transcripts kept on-device, configurable. Options: 7, 30, 90 days, forever. Enforced on launch, hourly. Settings → General → Keep library items.
 
 ## Troubleshooting
 permissions: Mic, Input Monitoring, Accessibility.
@@ -52,7 +52,7 @@ recording-wont-start: fix on card.
 hotkey-stopped-working: re-register steps on card.
 ai-unavailable: enable Apple Intelligence or switch to cloud/Ollama.
 ai-connection-failed: check API key, network.
-articulate-bad-results: reset prompt to default first.
+articulate-bad-results: Rewrite giving bad results — reset prompt to default first.
 
 ## Privacy
-Local-only default. Audio, transcripts, settings stay on Mac. No telemetry. Cloud providers receive text only when user enables Cleanup or Articulate w/ cloud. Only automatic network: one-time model download, daily update check.
+Local-only default. Audio, transcripts, settings stay on Mac. No telemetry. Cloud providers receive text only when user enables Cleanup or Rewrite w/ cloud. Only automatic network: one-time model download, daily update check.

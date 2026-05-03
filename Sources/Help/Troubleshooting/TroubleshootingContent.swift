@@ -93,7 +93,7 @@ enum TroubleshootingContent {
             expansionProse:
                 "This is a macOS-level constraint, not a Jot policy. Cancel (Esc) is the sole "
                 + "exception — it's scoped to in-flight operations and only active while recording, "
-                + "transcribing, or articulating, so it doesn't collide with the global rule."
+                + "transcribing, or rewriting, so it doesn't collide with the global rule."
         ) {
             TSIllustration.single("keyboard.badge.ellipsis")
         },
@@ -244,14 +244,14 @@ enum TroubleshootingContent {
 
         TroubleshootingCardData(
             id: "articulate-bad-results",
-            title: "Articulate giving bad results?",
+            title: "Rewrite giving bad results?",
             badge: "prompt",
             body:
-                "If Articulate results feel off, the shared prompt may have been edited. Open "
+                "If Rewrite results feel off, the shared prompt may have been edited. Open "
                 + "Settings → AI → Customize prompt and choose Reset to default. Still bad? Try "
                 + "a different provider.",
             expansionProse:
-                "Articulate's branch prompts build on top of a small shared-invariants block. "
+                "Rewrite's branch prompts build on top of a small shared-invariants block. "
                 + "Editing either can introduce regressions — Reset to default restores the "
                 + "shipped text. If the defaults still misbehave, switching to a cloud provider "
                 + "(OpenAI, Anthropic, Gemini) usually resolves structural-rewrite failures on "

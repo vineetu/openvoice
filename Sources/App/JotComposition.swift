@@ -26,10 +26,18 @@ struct SystemServices {
     /// etc. Production passes `nil` (the default); the harness builds a
     /// `SeamOverrides` from its stub conformers and sets this field. Phase
     /// 1.4 acceptance: same controller graph (RecorderController,
-    /// VoiceInputPipeline, DeliveryService, ArticulateController) wires
+    /// VoiceInputPipeline, DeliveryService, RewriteController) wires
     /// against either live or stub seams depending on whether overrides
     /// were supplied.
     let seamOverrides: SeamOverrides?
+    /// When `true`, `JotComposition.build` constructs a SwiftData
+    /// `ModelContainer` backed by an in-memory store instead of the live
+    /// `~/Library/Application Support/Jot/default.store`. Harness flow
+    /// tests set this so persistence work (e.g. `RewriteSession` writes
+    /// from `RewriteController.persistSession(...)`) doesn't pollute the
+    /// real on-disk store. Production omits this and gets the persistent
+    /// store.
+    let useInMemoryModelStore: Bool
 
     init(
         processInfo: ProcessInfo,
@@ -37,7 +45,8 @@ struct SystemServices {
         userDefaults: UserDefaults,
         urlSessionConfiguration: URLSessionConfiguration,
         notificationCenter: NotificationCenter,
-        seamOverrides: SeamOverrides? = nil
+        seamOverrides: SeamOverrides? = nil,
+        useInMemoryModelStore: Bool = false
     ) {
         self.processInfo = processInfo
         self.fileManager = fileManager
@@ -45,6 +54,7 @@ struct SystemServices {
         self.urlSessionConfiguration = urlSessionConfiguration
         self.notificationCenter = notificationCenter
         self.seamOverrides = seamOverrides
+        self.useInMemoryModelStore = useInMemoryModelStore
     }
 
     static let live = SystemServices(
@@ -145,7 +155,7 @@ struct AppServices {
     let pipeline: VoiceInputPipeline
     let recorder: RecorderController
     let delivery: DeliveryService
-    let articulateController: ArticulateController
+    let rewriteController: RewriteController
     let hotkeyRouter: HotkeyRouter
     let menuBar: JotMenuBarController
     let overlay: OverlayWindowController
@@ -159,7 +169,7 @@ struct AppServices {
 extension AppServices {
     /// Live AppServices resolved via `NSApp.delegate`. SwiftUI views and
     /// other call sites that can't take constructor injection (e.g. the
-    /// "Test Connection" button in `Sources/Settings/ArticulatePane.swift`
+    /// "Test Connection" button in `Sources/Settings/RewritePane.swift`
     /// and stored-property `LLMClient` instances on wizard step views)
     /// use this to read `services.urlSession` without plumbing the seam
     /// through five SwiftUI parent layers.
@@ -237,19 +247,30 @@ enum JotComposition {
         //     store so the app can still boot. The previous
         //     `try!` (line 64) becomes a typed throw — a fallback that
         //     itself fails is genuinely unrecoverable.
+        //
+        // Test-only short-circuit: harness flow tests pass
+        // `useInMemoryModelStore: true` so the SwiftData container is
+        // backed by an in-memory store (no real `default.store` writes).
+        // The filesystem migration / cleanup dance below MUST be gated
+        // behind this flag — otherwise tests still touch the real
+        // `~/Library/Application Support/Jot/` tree on the dev/CI
+        // machine.
         let fm = systemServices.fileManager
         let appSupportRoot = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let jotDir = appSupportRoot.appendingPathComponent("Jot", isDirectory: true)
-        try? fm.createDirectory(at: jotDir, withIntermediateDirectories: true)
-
         let newURL = jotDir.appendingPathComponent("default.store")
-        let oldURL = appSupportRoot.appendingPathComponent("default.store")
 
-        if fm.fileExists(atPath: oldURL.path), !fm.fileExists(atPath: newURL.path) {
-            for suffix in ["", "-wal", "-shm"] {
-                let src = appSupportRoot.appendingPathComponent("default.store\(suffix)")
-                let dst = jotDir.appendingPathComponent("default.store\(suffix)")
-                try? fm.moveItem(at: src, to: dst)
+        if !systemServices.useInMemoryModelStore {
+            try? fm.createDirectory(at: jotDir, withIntermediateDirectories: true)
+
+            let oldURL = appSupportRoot.appendingPathComponent("default.store")
+
+            if fm.fileExists(atPath: oldURL.path), !fm.fileExists(atPath: newURL.path) {
+                for suffix in ["", "-wal", "-shm"] {
+                    let src = appSupportRoot.appendingPathComponent("default.store\(suffix)")
+                    let dst = jotDir.appendingPathComponent("default.store\(suffix)")
+                    try? fm.moveItem(at: src, to: dst)
+                }
             }
         }
 
@@ -272,7 +293,7 @@ enum JotComposition {
         // Wizard / Transcription pane) will perform the cleanup.
         let anyCurrentModelCached = ParakeetModelID.allCases.contains { ModelCache.shared.isCached($0) }
         let didCleanup = systemServices.userDefaults.bool(forKey: "jot.migration.fluidAudioCleanupV1")
-        if !didCleanup && anyCurrentModelCached {
+        if !systemServices.useInMemoryModelStore && !didCleanup && anyCurrentModelCached {
             try? fm.removeItem(at: appSupportRoot.appendingPathComponent("FluidAudio"))
             // Per-suffix orphan cleanup: only run if the main store
             // moved successfully (proves the v1→v2 SwiftData relocation
@@ -293,21 +314,45 @@ enum JotComposition {
         }
 
         let modelContainer: ModelContainer
-        do {
-            let config = ModelConfiguration(url: newURL)
-            modelContainer = try ModelContainer(for: Recording.self, configurations: config)
-        } catch {
+        if systemServices.useInMemoryModelStore {
+            // Harness flow tests pass `useInMemoryModelStore: true` so
+            // `RewriteSession` writes from `RewriteController.persistSession(...)`
+            // and `Recording` writes from `RecordingPersister` land in an
+            // in-memory store rather than `default.store` on disk. Without
+            // this seam, every harness rewrite test row would persist into
+            // the real user library on the dev/CI machine.
             do {
                 let memoryConfig = ModelConfiguration(isStoredInMemoryOnly: true)
-                modelContainer = try ModelContainer(for: Recording.self, configurations: memoryConfig)
+                modelContainer = try ModelContainer(
+                    for: Recording.self, RewriteSession.self,
+                    configurations: memoryConfig
+                )
             } catch {
                 throw JotCompositionError.modelContainerUnavailable(underlying: error)
+            }
+        } else {
+            do {
+                let config = ModelConfiguration(url: newURL)
+                modelContainer = try ModelContainer(
+                    for: Recording.self, RewriteSession.self,
+                    configurations: config
+                )
+            } catch {
+                do {
+                    let memoryConfig = ModelConfiguration(isStoredInMemoryOnly: true)
+                    modelContainer = try ModelContainer(
+                        for: Recording.self, RewriteSession.self,
+                        configurations: memoryConfig
+                    )
+                } catch {
+                    throw JotCompositionError.modelContainerUnavailable(underlying: error)
+                }
             }
         }
 
         // App-level controllers. Construction order matches AppDelegate's
         // pre-Phase-0 `applicationDidFinishLaunching` body (lines 104-253):
-        // pipeline → recorder → delivery → articulate → hotkey router →
+        // pipeline → recorder → delivery → rewrite → hotkey router →
         // menu bar → overlay → persister → retention → sound triggers.
         // Phase 3 F4: `TranscriberHolder` (constructed above) replaces
         // a free-floating `any Transcribing` field on `AppServices`.
@@ -355,19 +400,20 @@ enum JotComposition {
         // post-construction so the deliveryBridge Combine sink can be
         // installed at the same time as the other AppDelegate observers.)
 
-        let articulateController = ArticulateController(
+        let rewriteController = RewriteController(
             pipeline: pipeline,
             urlSession: urlSession,
             appleIntelligence: appleIntelligence,
             pasteboard: pasteboard,
             llmConfiguration: llmConfiguration,
+            modelContext: modelContainer.mainContext,
             logSink: logSink
         )
 
         let hotkeyRouter = HotkeyRouter(
             recorder: recorder,
             delivery: delivery,
-            articulateController: articulateController
+            rewriteController: rewriteController
         )
 
         // Sparkle updater is constructed before `menuBar` so the menu's
@@ -394,7 +440,7 @@ enum JotComposition {
         let overlay = OverlayWindowController(
             recorder: recorder,
             delivery: delivery,
-            articulateController: articulateController,
+            rewriteController: rewriteController,
             pipeline: pipeline
         )
 
@@ -421,7 +467,7 @@ enum JotComposition {
             pipeline: pipeline,
             recorder: recorder,
             delivery: delivery,
-            articulateController: articulateController,
+            rewriteController: rewriteController,
             hotkeyRouter: hotkeyRouter,
             menuBar: menuBar,
             overlay: overlay,

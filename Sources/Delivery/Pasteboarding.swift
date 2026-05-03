@@ -7,24 +7,24 @@ import Foundation
 /// `Tests/JotHarness/` keep an in-memory store so flow tests can verify
 /// pasteboard state without affecting the developer's real clipboard.
 ///
-/// Methods mirror the operations the live recording / articulate paths
+/// Methods mirror the operations the live recording / rewrite paths
 /// already perform:
 /// - `snapshot()` captures current pasteboard contents (per-type data)
 ///   so the clipboard-sandwich can roll back after a synthetic ⌘V.
 /// - `write(_:)` clears + sets the pasteboard string. `@discardableResult
 ///   Bool` preserves the failure-detection path that DeliveryService and
-///   ArticulateController already act on.
+///   RewriteController already act on.
 /// - `restore(_:)` writes a snapshot back, used by both the auto-paste
-///   delay-restore and the Articulate selection-capture flow.
+///   delay-restore and the Rewrite selection-capture flow.
 /// - `changeCount` exposes `NSPasteboard.changeCount` because
-///   ArticulateController.captureSelection compares before/after to detect
+///   RewriteController.captureSelection compares before/after to detect
 ///   whether the synthetic ⌘C actually moved data onto the pasteboard.
 /// - `readString()` exposes `NSPasteboard.string(forType: .string)` for the
-///   same Articulate flow.
+///   same Rewrite flow.
 ///
 /// All operations are `@MainActor`-isolated because `NSPasteboard` and the
 /// existing `ClipboardSandwich` helpers are MainActor-bound, and the only
-/// consumers (`DeliveryService`, `ArticulateController`) are themselves
+/// consumers (`DeliveryService`, `RewriteController`) are themselves
 /// `@MainActor`. `Sendable` so `any Pasteboarding` round-trips through
 /// `AppServices` without warnings.
 @MainActor

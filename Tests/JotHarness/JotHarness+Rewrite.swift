@@ -3,20 +3,20 @@ import Foundation
 
 extension JotHarness {
 
-    // MARK: - Fixed-prompt articulate
+    // MARK: - Fixed-prompt rewrite
 
-    /// Drive the v1.5 fixed-prompt articulate path
-    /// (`ArticulateController.articulate()`). Pre-primes the stub
+    /// Drive the v1.5 fixed-prompt rewrite path
+    /// (`RewriteController.rewrite()`). Pre-primes the stub
     /// pasteboard with `selection` (so `captureSelection`'s synthetic
     /// ⌘C guard sees a `changeCount` bump), enqueues the provider's
     /// canned response on `StubURLProtocol`, invokes the controller,
     /// and snapshots the result.
     ///
     /// Spec source: `docs/plans/agentic-testing.md` §0.2.
-    func articulate(
+    func rewrite(
         selection: String,
         provider: ProviderSeed
-    ) async throws -> ArticulateResult {
+    ) async throws -> RewriteResult {
         let testStart = Date()
 
         // 0. Drain any chat/completions responses left over from a
@@ -33,7 +33,7 @@ extension JotHarness {
         //    regardless of which provider the seed names — the
         //    StubURLProtocol intercepts every URL anyway, so the on-
         //    the-wire endpoint doesn't matter for the test.
-        configureForArticulate(seedProvider: provider)
+        configureForRewrite(seedProvider: provider)
 
         // 2. Enqueue the canned HTTP response.
         Self.enqueueProviderResponse(provider, on: services.urlSession)
@@ -47,31 +47,31 @@ extension JotHarness {
         //    the `Pasteboarding` seam now, no timing race.
         stubPasteboard.simulatedExternalSelection = selection
 
-        // 4. Drive the controller. The first `articulate()` call
+        // 4. Drive the controller. The first `rewrite()` call
         //    schedules `runFixed` as a Task, so the controller's
         //    `state` may still read `.idle` when we return. Wait for
         //    the state to leave `.idle` first, then for terminal —
         //    otherwise `awaitTerminalState` short-circuits on the
         //    pre-flow `.idle` reading.
-        await services.articulateController.articulate()
-        try await Self.awaitArticulateLeavesIdle(services.articulateController, timeout: .seconds(2))
-        try await services.articulateController.awaitTerminalState(timeout: .seconds(10))
+        await services.rewriteController.rewrite()
+        try await Self.awaitRewriteLeavesIdle(services.rewriteController, timeout: .seconds(2))
+        try await services.rewriteController.awaitTerminalState(timeout: .seconds(10))
 
         // 5. Snapshot.
         let log = await capturingLogSink.entries(since: testStart)
-        let pillError = Self.derivePillError(from: services.articulateController.state)
+        let pillError = Self.derivePillError(from: services.rewriteController.state)
         let pastedText = Self.lastPasteAfterStart(in: stubPasteboard.history, sinceTestStart: testStart)
-        return ArticulateResult(
+        return RewriteResult(
             pastedText: pastedText,
             pillError: pillError,
             log: log
         )
     }
 
-    // MARK: - Custom (voice-driven) articulate
+    // MARK: - Custom (voice-driven) rewrite
 
-    /// Drive the v1.4 custom-instruction articulate path
-    /// (`ArticulateController.toggle()`). The voice instruction is
+    /// Drive the v1.4 custom-instruction rewrite path
+    /// (`RewriteController.toggle()`). The voice instruction is
     /// captured via the stub `AudioCapture`, transcribed via the stub
     /// `Transcriber`, and then routed to the LLM through the same
     /// `StubURLProtocol` interception path as the fixed flow.
@@ -80,24 +80,24 @@ extension JotHarness {
     /// "hello world" + provider `.openai(.respondsWith("HELLO WORLD"))`
     /// (or any successful canned response) returns a result whose
     /// `pasteboardHistory` contains "HELLO WORLD".
-    func articulateCustom(
+    func rewriteWithVoice(
         selection: String,
         instruction: AudioSource,
         provider: ProviderSeed
-    ) async throws -> ArticulateResult {
+    ) async throws -> RewriteResult {
         let testStart = Date()
 
         // Drain leftover chat/completions URL responses — same
-        // rationale as `articulate(selection:provider:)`.
+        // rationale as `rewrite(selection:provider:)`.
         StubURLProtocol.removeMatching("chat/completions")
 
-        configureForArticulate(seedProvider: provider)
+        configureForRewrite(seedProvider: provider)
         Self.enqueueProviderResponse(provider, on: services.urlSession)
 
         // Pre-warm the transcriber. Production calls
         // `ensureTranscriberLoaded` from `AppDelegate.prewarmTranscriber`
         // and again as a `Task.detached` inside `RecorderController.runFlow`;
-        // articulate's `runCustom` doesn't prewarm. Without this the
+        // rewrite's `runCustom` doesn't prewarm. Without this the
         // pipeline reports `modelMissing` and the controller surfaces
         // the "Transcription model is still loading" error.
         try await services.pipeline.ensureTranscriberLoaded()
@@ -123,23 +123,23 @@ extension JotHarness {
         // (which happens AFTER captureSelection completes and pipeline
         // recording starts), second toggle stops recording → transcribe
         // → LLM → paste.
-        await services.articulateController.toggle()
-        try await Self.awaitArticulateRecording(services.articulateController, timeout: .seconds(5))
+        await services.rewriteController.toggle()
+        try await Self.awaitRewriteRecording(services.rewriteController, timeout: .seconds(5))
 
-        await services.articulateController.toggle()
-        try await services.articulateController.awaitTerminalState(timeout: .seconds(15))
+        await services.rewriteController.toggle()
+        try await services.rewriteController.awaitTerminalState(timeout: .seconds(15))
 
         let log = await capturingLogSink.entries(since: testStart)
-        let pillError = Self.derivePillError(from: services.articulateController.state)
+        let pillError = Self.derivePillError(from: services.rewriteController.state)
         let pastedText = Self.lastPasteAfterStart(in: stubPasteboard.history, sinceTestStart: testStart)
-        return ArticulateResult(
+        return RewriteResult(
             pastedText: pastedText,
             pillError: pillError,
             log: log
         )
     }
 
-    // MARK: - Helpers (articulate-specific)
+    // MARK: - Helpers (rewrite-specific)
 
     /// Sentinel for "transcriber has been seeded by the caller". The
     /// stub's queue is internal; the harness assumes "always reseed if
@@ -150,21 +150,21 @@ extension JotHarness {
         false
     }
 
-    /// Configure the per-harness `LLMConfiguration` for the articulate
+    /// Configure the per-harness `LLMConfiguration` for the rewrite
     /// run. Always routes through `.ollama` regardless of which
     /// provider the seed names — see top-of-method note in
-    /// `articulate(...)` for why. Also flips off Transform so the
-    /// dictation flow's auto-cleanup path doesn't fire (articulate has
+    /// `rewrite(...)` for why. Also flips off Transform so the
+    /// dictation flow's auto-cleanup path doesn't fire (rewrite has
     /// its own cleanup gate).
     @MainActor
-    func configureForArticulate(seedProvider: ProviderSeed) {
+    func configureForRewrite(seedProvider: ProviderSeed) {
         services.llmConfiguration.provider = .ollama
     }
 
     /// Translate a `ProviderSeed` into a `StubURLProtocol` enqueue.
     /// Matches against the Ollama base URL substring — the test
     /// harness always routes via `.ollama` (see
-    /// `configureForArticulate`), so a single matcher covers every
+    /// `configureForRewrite`), so a single matcher covers every
     /// provider seed shape we care about for Phase 1.5.
     static func enqueueProviderResponse(_ seed: ProviderSeed, on session: URLSession) {
         // Match the LLM chat-completion path specifically — NOT every
@@ -316,10 +316,10 @@ extension JotHarness {
         history.last { $0.timestamp >= sinceTestStart }?.text
     }
 
-    /// Map `ArticulateController.ArticulateState` → harness `PillError`.
+    /// Map `RewriteController.RewriteState` → harness `PillError`.
     /// Only `.error(message)` produces a non-nil result; the message
     /// is the user-facing pill string the controller would render.
-    static func derivePillError(from state: ArticulateController.ArticulateState) -> PillError? {
+    static func derivePillError(from state: RewriteController.RewriteState) -> PillError? {
         switch state {
         case .error(let message):
             return PillError(userMessage: message, severity: .transient)
@@ -328,12 +328,12 @@ extension JotHarness {
         }
     }
 
-    /// Wait until `articulateController.state` leaves `.idle` so a
+    /// Wait until `rewriteController.state` leaves `.idle` so a
     /// subsequent `awaitTerminalState` doesn't short-circuit on the
     /// pre-flow `.idle` reading. Used by the fixed-prompt flow which
     /// goes `.idle → .capturing → .rewriting → .idle`.
-    static func awaitArticulateLeavesIdle(
-        _ controller: ArticulateController,
+    static func awaitRewriteLeavesIdle(
+        _ controller: RewriteController,
         timeout: Duration
     ) async throws {
         if case .idle = controller.state {} else { return }
@@ -360,11 +360,11 @@ extension JotHarness {
         }
     }
 
-    /// Wait until `articulateController.state == .recording(...)` so
+    /// Wait until `rewriteController.state == .recording(...)` so
     /// the second `toggle()` doesn't race the first one's transition
     /// from `.capturing → .recording`. Bounded poll on `$state`.
-    static func awaitArticulateRecording(
-        _ controller: ArticulateController,
+    static func awaitRewriteRecording(
+        _ controller: RewriteController,
         timeout: Duration
     ) async throws {
         if case .recording = controller.state { return }

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SoundPane: View {
     @AppStorage("jot.sound.recordingStart") private var recordingStart: Bool = true
-    @AppStorage("jot.sound.articulateStart") private var articulateStart: Bool = true
+    @AppStorage("jot.sound.articulateStart") private var rewriteStart: Bool = true
     @AppStorage("jot.sound.recordingStop") private var recordingStop: Bool = true
     @AppStorage("jot.sound.recordingCancel") private var recordingCancel: Bool = true
     @AppStorage("jot.sound.transcriptionComplete") private var transcriptionComplete: Bool = true
@@ -16,9 +16,9 @@ struct SoundPane: View {
                          help: "Play a chime when recording begins.",
                          popoverBody: "A short chime confirms Jot heard your hotkey. When on: you get audible feedback the moment capture starts, without needing to look at the menu bar.",
                          helpAnchor: "sound-recording-chimes")
-                chimeRow("Articulate start", isOn: $articulateStart, effect: .articulateStart,
-                         help: "Play a chime when an Articulate (Custom) voice instruction begins.",
-                         popoverBody: "A distinct chime — pitch-shifted from the dictation start chime — plays when Articulate (Custom) opens the mic for your voice instruction. When on: you can hear the difference between a dictation session and an Articulate rewrite without looking at the menu bar.",
+                chimeRow("Rewrite start", isOn: $rewriteStart, effect: .rewriteStart,
+                         help: "Play a chime when a Rewrite with Voice instruction begins.",
+                         popoverBody: "A distinct chime — pitch-shifted from the dictation start chime — plays when Rewrite with Voice opens the mic for your voice instruction. When on: you can hear the difference between a dictation session and a Rewrite without looking at the menu bar.",
                          helpAnchor: "sound-recording-chimes")
                 chimeRow("Recording stop", isOn: $recordingStop, effect: .recordingStop,
                          help: "Play a chime when recording stops and transcription starts.",

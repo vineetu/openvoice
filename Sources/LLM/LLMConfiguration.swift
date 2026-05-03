@@ -43,8 +43,8 @@ final class LLMConfiguration: ObservableObject {
             "jot.llm.transformPrompt",
             store: defaults
         )
-        self._articulatePrompt = AppStorage(
-            wrappedValue: ArticulatePrompt.default,
+        self._rewritePrompt = AppStorage(
+            wrappedValue: RewritePrompt.default,
             "jot.llm.rewritePrompt",
             store: defaults
         )
@@ -64,7 +64,7 @@ final class LLMConfiguration: ObservableObject {
     ///
     /// v1.5 change: if Apple Intelligence is available on this Mac, the
     /// effective default for a fresh install becomes `.appleIntelligence`
-    /// so cleanup and articulate run on-device with no API-key step.
+    /// so cleanup and rewrite run on-device with no API-key step.
     /// Existing users whose `@AppStorage` already holds a provider value
     /// see no change — `@AppStorage` reads the stored value before this
     /// default ever applies.
@@ -76,10 +76,10 @@ final class LLMConfiguration: ObservableObject {
     @AppStorage("jot.transformEnabled") var transformEnabled: Bool = false
 
     @AppStorage("jot.llm.transformPrompt") var transformPrompt: String = TransformPrompt.default
-    // Swift property renamed to `articulatePrompt` in v1.5; the underlying
-    // @AppStorage key stays as `"jot.llm.rewritePrompt"` so users' customized
-    // prompts survive the rename. Do NOT change the key literal.
-    @AppStorage("jot.llm.rewritePrompt") var articulatePrompt: String = ArticulatePrompt.default
+    // The Swift property name has been refactored across releases; the
+    // underlying @AppStorage key stays `"jot.llm.rewritePrompt"` so users'
+    // customized prompts survive every rename. Do NOT change the key literal.
+    @AppStorage("jot.llm.rewritePrompt") var rewritePrompt: String = RewritePrompt.default
 
     // MARK: - Per-provider storage keys
 

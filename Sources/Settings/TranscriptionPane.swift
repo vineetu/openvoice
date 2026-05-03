@@ -87,7 +87,7 @@ struct TranscriptionPane: View {
                     setSidebarSelection(.settings(.ai))
                 } label: {
                     HStack {
-                        Text("Cleanup, Articulate, and other AI transcription features")
+                        Text("Cleanup, Rewrite, and other AI transcription features")
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold))

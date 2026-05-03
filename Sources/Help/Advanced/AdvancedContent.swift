@@ -63,7 +63,7 @@ enum AdvancedContent {
     private static let aiProviders = AdvancedSection(
         id: "ai-providers",
         title: "AI providers",
-        subtitle: "Pick who does Cleanup and Articulate. Mix on-device, local, and cloud as you like.",
+        subtitle: "Pick who does Cleanup and Rewrite. Mix on-device, local, and cloud as you like.",
         cards: [
             AdvancedCardData(
                 id: "ai-apple-intelligence",
@@ -83,7 +83,7 @@ enum AdvancedContent {
                 expansionProse:
                     "Three cloud providers are built in. Choose one in Settings → AI, paste your "
                     + "API key (stored in Keychain, never on disk), and pick a model. Cloud "
-                    + "requests are scoped to Cleanup and Articulate — the dictation path stays on-device."
+                    + "requests are scoped to Cleanup and Rewrite — the dictation path stays on-device."
             ),
             AdvancedCardData(
                 id: "ai-ollama",
@@ -108,11 +108,11 @@ enum AdvancedContent {
                 id: "ai-editable-prompts",
                 title: "Editable prompts",
                 badge: "power",
-                body: "Tune the Cleanup and Articulate system prompts. Reset available.",
+                body: "Tune the Cleanup and Rewrite system prompts. Reset available.",
                 expansionProse:
-                    "Jot has two separate system prompts. Cleanup's prompt (Settings → AI → Customize prompt) controls how dictation transcripts get tidied up — disfluencies, punctuation, grammar. Articulate's Shared system prompt (Settings → AI → Shared system prompt) is the foundation of every rewrite, used by both Articulate (Fixed) and Articulate (Custom). Editing one does not affect the other. "
+                    "Jot has two separate system prompts. Cleanup's prompt (Settings → AI → Customize prompt) controls how dictation transcripts get tidied up — disfluencies, punctuation, grammar. Rewrite's Shared system prompt (Settings → AI → Shared system prompt) is the foundation of every rewrite, used by both Rewrite and Rewrite with Voice. Editing one does not affect the other. "
                     + "\n\nOn top of the Shared system prompt, Jot appends a short branch-specific tendency chosen automatically by the intent classifier — voice-preserving, shape change, translation, or code — based on your voice instruction. The appended tendency is not user-editable. "
-                    + "\n\nEvery provider uses the same two prompts, so edits here apply uniformly across Apple Intelligence, OpenAI, Anthropic, Gemini, and Ollama. Both editors ship with a Reset to default button if Articulate or Cleanup starts producing odd results."
+                    + "\n\nEvery provider uses the same two prompts, so edits here apply uniformly across Apple Intelligence, OpenAI, Anthropic, Gemini, and Ollama. Both editors ship with a Reset to default button if Rewrite or Cleanup starts producing odd results."
             ),
             AdvancedCardData(
                 id: "ai-test-connection",

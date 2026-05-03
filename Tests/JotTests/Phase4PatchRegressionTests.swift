@@ -12,11 +12,11 @@ import Testing
 /// throws `model-missing`.
 ///
 /// Issue #2 (AppleIntelligence seam leak): `RecorderController` and
-/// `ArticulateController` previously constructed `LLMClient` without
+/// `RewriteController` previously constructed `LLMClient` without
 /// passing the `AppleIntelligenceClienting` seam, silently bypassing
-/// `StubAppleIntelligence` injection in production cleanup + articulate
+/// `StubAppleIntelligence` injection in production cleanup + rewrite
 /// paths. This test seeds a unique canned string on the stub and asserts
-/// it actually reaches the pasteboard via the articulate flow.
+/// it actually reaches the pasteboard via the rewrite flow.
 ///
 /// Issue #3 (TranscriberHolder hermetic-harness): the harness must not
 /// depend on the dev/CI machine's `~/Library/Application Support/Jot/Models/`
@@ -89,31 +89,31 @@ struct Phase4PatchRegressionTests {
 
     /// Switch the harness's `LLMConfiguration` provider to
     /// `.appleIntelligence` and seed `stubAppleIntelligence` with a
-    /// unique canned string. Drive the fixed-prompt articulate flow.
+    /// unique canned string. Drive the fixed-prompt rewrite flow.
     /// If the seam threading is correct, the canned string lands on the
-    /// stub pasteboard. Pre-fix: `ArticulateController` constructed a
+    /// stub pasteboard. Pre-fix: `RewriteController` constructed a
     /// fresh live `AppleIntelligenceClient()` inside `LLMClient.init`
     /// (seam dropped), so the stub was bypassed and the test would fail
     /// (live client unavailable / wrong text).
-    @Test func articulateRoutesThroughInjectedAppleIntelligenceStub() async throws {
+    @Test func rewriteRoutesThroughInjectedAppleIntelligenceStub() async throws {
         let harness = try await JotHarness(seed: .default)
 
         let unique = "PHASE4-PATCH-CANNED-\(UUID().uuidString)"
-        await harness.stubAppleIntelligence.enqueueArticulate(unique)
+        await harness.stubAppleIntelligence.enqueueRewrite(unique)
 
         // Switch to Apple Intelligence so the LLMClient short-circuits
-        // through `appleClient.articulate(...)` instead of the URL session.
+        // through `appleClient.rewrite(...)` instead of the URL session.
         harness.services.llmConfiguration.provider = .appleIntelligence
 
         // Pre-arm the pasteboard so `captureSelection` sees a changeCount bump.
         harness.stubPasteboard.simulatedExternalSelection = "hello world"
 
-        await harness.services.articulateController.articulate()
-        try await JotHarness.awaitArticulateLeavesIdle(
-            harness.services.articulateController,
+        await harness.services.rewriteController.rewrite()
+        try await JotHarness.awaitRewriteLeavesIdle(
+            harness.services.rewriteController,
             timeout: .seconds(2)
         )
-        try await harness.services.articulateController.awaitTerminalState(timeout: .seconds(10))
+        try await harness.services.rewriteController.awaitTerminalState(timeout: .seconds(10))
 
         let pasted = JotHarness.lastPasteAfterStart(
             in: harness.stubPasteboard.history,
@@ -138,7 +138,7 @@ struct Phase4PatchRegressionTests {
 
     // MARK: - Round 2 — wizard-step preview seam threading
 
-    /// Round 2 regression: `CleanupStep` and `ArticulateIntroStep`
+    /// Round 2 regression: `CleanupStep` and `RewriteIntroStep`
     /// resolve their `LLMClient` lazily via `AppServices.live`. Pre-
     /// round-2 they constructed `LLMClient(session:llmConfiguration:)`
     /// without passing `appleClient`, so `LLMClient.init` fell back
@@ -161,7 +161,7 @@ struct Phase4PatchRegressionTests {
         harness.services.llmConfiguration.provider = .appleIntelligence
 
         // Construct LLMClient with the exact shape `CleanupStep.llm` and
-        // `ArticulateIntroStep.llm` use today (round-2-fixed):
+        // `RewriteIntroStep.llm` use today (round-2-fixed):
         //   LLMClient(
         //       session: services.urlSession,
         //       appleClient: services.appleIntelligence,
@@ -178,14 +178,14 @@ struct Phase4PatchRegressionTests {
     }
 
     /// Companion regression: same construction shape but for the
-    /// articulate code path (mirrors `ArticulateIntroStep.runPreview`'s
-    /// `llm.articulate(selectedText:instruction:)` call). Asserts
-    /// the StubAppleIntelligence's articulate queue is consulted.
-    @Test func wizardStepLLMClientShapeRoutesAppleIntelligenceArticulate() async throws {
+    /// rewrite code path (mirrors `RewriteIntroStep.runPreview`'s
+    /// `llm.rewrite(selectedText:instruction:)` call). Asserts
+    /// the StubAppleIntelligence's rewrite queue is consulted.
+    @Test func wizardStepLLMClientShapeRoutesAppleIntelligenceRewrite() async throws {
         let harness = try await JotHarness(seed: .default)
 
-        let unique = "WIZARD-ARTICULATE-CANNED-\(UUID().uuidString)"
-        await harness.stubAppleIntelligence.enqueueArticulate(unique)
+        let unique = "WIZARD-REWRITE-CANNED-\(UUID().uuidString)"
+        await harness.stubAppleIntelligence.enqueueRewrite(unique)
         harness.services.llmConfiguration.provider = .appleIntelligence
 
         let client = LLMClient(
@@ -194,9 +194,9 @@ struct Phase4PatchRegressionTests {
             llmConfiguration: harness.services.llmConfiguration
         )
 
-        let result = try await client.articulate(
+        let result = try await client.rewrite(
             selectedText: "hello world",
-            instruction: "Articulate this"
+            instruction: "Rewrite this"
         )
         #expect(result == unique)
     }
@@ -389,9 +389,9 @@ struct Phase4PatchRegressionTests {
                 "help-content-base.md must include the jot-asr-languages fragment placeholder so concat-help-content splices the generated prose. See Issue #4 from codex round 1 review.")
     }
 
-    // MARK: - Round 5 — ArticulatePane Test Connection seam threading
+    // MARK: - Round 5 — RewritePane Test Connection seam threading
 
-    /// Round 5 regression: pre-fix `ArticulatePane.testConnection()` did a
+    /// Round 5 regression: pre-fix `RewritePane.testConnection()` did a
     /// brittle on-demand `AppServices.live` lookup that could return nil
     /// on a fresh install (SwiftUI Settings scene timing / NSApp.delegate
     /// cast quirk), surfacing "App services not yet ready" while every
@@ -405,10 +405,10 @@ struct Phase4PatchRegressionTests {
     /// pane with the harness's seam instances and assert the private
     /// fields hold those identities. Pre-fix the fields didn't exist;
     /// the test wouldn't compile.
-    @Test func articulatePaneThreadsTestConnectionSeams() async throws {
+    @Test func rewritePaneThreadsTestConnectionSeams() async throws {
         let harness = try await JotHarness(seed: .default)
 
-        let pane = ArticulatePane(
+        let pane = RewritePane(
             urlSession: harness.services.urlSession,
             appleIntelligence: harness.services.appleIntelligence
         )
@@ -443,14 +443,17 @@ struct Phase4PatchRegressionTests {
     /// nothing. Post-fix the pane takes `audioCapture: any AudioCapturing`
     /// via init, threaded from `JotAppWindow`'s `.settings(.general)`
     /// route. Same Mirror-based shape check as
-    /// `articulatePaneThreadsTestConnectionSeams`. Pre-fix the field
+    /// `rewritePaneThreadsTestConnectionSeams`. Pre-fix the field
     /// didn't exist; the test wouldn't compile.
     @Test func generalPaneThreadsAudioCaptureSeam() async throws {
         let harness = try await JotHarness(seed: .default)
 
         let pane = GeneralPane(
             audioCapture: harness.services.audioCapture,
-            keychain: harness.stubKeychain
+            keychain: harness.stubKeychain,
+            urlSession: harness.services.urlSession,
+            appleIntelligence: harness.services.appleIntelligence,
+            llmConfiguration: harness.services.llmConfiguration
         )
 
         let mirror = Mirror(reflecting: pane)
@@ -518,8 +521,8 @@ struct Phase4PatchRegressionTests {
     // Pre-fix `LLMConfiguration` declared its `provider` as
     //   `@AppStorage(...) var provider: LLMProvider = ...`
     // without a `store:` argument, so reads/writes always hit
-    // `UserDefaults.standard`. The `JotHarness+Articulate` helper
-    // `configureForArticulate` writes `services.llmConfiguration.provider
+    // `UserDefaults.standard`. The `JotHarness+Rewrite` helper
+    // `configureForRewrite` writes `services.llmConfiguration.provider
     //  = .ollama`; pre-fix that write landed in the developer's real
     // `~/Library/Preferences/com.jot.Jot.plist`. After test runs, the
     // freshly-built Jot.app launched on the same dev machine read
@@ -675,11 +678,11 @@ struct Phase4PatchRegressionTests {
     /// the toggle's visibility predicate must return true for flavor1 just
     /// like every other non-Apple-Intelligence provider.
     ///
-    /// Shape test (mirror `articulatePaneThreadsTestConnectionSeams`): the
+    /// Shape test (mirror `rewritePaneThreadsTestConnectionSeams`): the
     /// toggle's gate in `genericBody` is `!isAppleIntelligenceSelected`. We
     /// assert that the boolean predicate evaluates to `true` when the
     /// configured provider is `.flavor1`.
-    @Test func articulatePaneShowsAskJotToggleForFlavor1() throws {
+    @Test func rewritePaneShowsAskJotToggleForFlavor1() throws {
         #if JOT_FLAVOR_1
         let suite = "com.jot.Jot.test.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -689,7 +692,7 @@ struct Phase4PatchRegressionTests {
         let config = LLMConfiguration(keychain: stubKeychain, defaults: defaults)
         config.provider = .flavor1
 
-        // The toggle's gate in `ArticulatePane.genericBody` is
+        // The toggle's gate in `RewritePane.genericBody` is
         // `!isAppleIntelligenceSelected`. With `.flavor1` selected, that
         // predicate must be `true`. Pre-bandage the gate also AND'd
         // against `!isFlavor1Selected`, which made the whole expression

@@ -1,13 +1,11 @@
 import KeyboardShortcuts
 import SwiftUI
 
-/// Settings pane for AI features — covers both Articulate (voice-driven
-/// and fixed-prompt selection rewrites) and the Transform / Auto-correct
+/// Settings pane for AI features — covers both Rewrite (voice-driven and
+/// fixed-prompt selection rewrites) and the Transform / Auto-correct
 /// provider configuration, since all share `LLMConfiguration`. The
 /// user-visible display name is "AI" (design doc §4 / §7).
-///
-/// v1.5 rename: `RewritePane` → `ArticulatePane`. File renamed accordingly.
-struct ArticulatePane: View {
+struct RewritePane: View {
     @EnvironmentObject private var config: LLMConfiguration
     @AppStorage("jot.askjot.allowCloud") private var allowCloudAskJot = false
     @Environment(\.helpNavigator) private var navigator
@@ -59,7 +57,7 @@ struct ArticulatePane: View {
     /// Returns `false` on the public build (the case doesn't exist there).
     /// Used to swap only the provider-specific fields (baseURL/apiKey/model)
     /// for `Flavor1Pane`, while keeping the cross-cutting UI — provider
-    /// picker, articulate/transform toggles, custom prompts, and Test
+    /// picker, rewrite/transform toggles, custom prompts, and Test
     /// Connection — visible. The Keychain-leak risk is specific to the
     /// generic API-key field at ~L112; the rest of the pane is safe.
     private var isFlavor1Selected: Bool {
@@ -83,7 +81,7 @@ struct ArticulatePane: View {
                         }
                         InfoPopoverButton(
                             title: "Provider",
-                            body: "Which service handles Auto-correct and Articulate. Apple Intelligence runs on-device (free, no API key). OpenAI, Anthropic, Gemini, and local Ollama round out the options.",
+                            body: "Which service handles Auto-correct and Rewrite. Apple Intelligence runs on-device (free, no API key). OpenAI, Anthropic, Gemini, and local Ollama round out the options.",
                             helpAnchor: "ai-cloud-providers"
                         )
                     }
@@ -208,11 +206,11 @@ struct ArticulatePane: View {
                     .id("cleanup-prompt")
                 }
 
-                Section("Articulate") {
+                Section("Rewrite") {
                     HStack {
-                        Text("Articulate (Custom)")
+                        Text("Rewrite with Voice")
                         Spacer()
-                        KeyboardShortcuts.Recorder(for: .articulateCustom)
+                        KeyboardShortcuts.Recorder(for: .rewriteWithVoice)
                     }
                     .id("articulate-custom")
                     Text("Select text, press the shortcut, speak your instruction.")
@@ -221,23 +219,23 @@ struct ArticulatePane: View {
                         .textSelection(.enabled)
 
                     HStack {
-                        Text("Articulate")
+                        Text("Rewrite")
                         Spacer()
-                        KeyboardShortcuts.Recorder(for: .articulate)
+                        KeyboardShortcuts.Recorder(for: .rewrite)
                     }
                     .id("articulate-fixed")
-                    Text("Select text and press the shortcut — Jot articulates it with a built-in prompt. No voice step.")
+                    Text("Select text and press the shortcut — Jot rewrites it with a built-in prompt. No voice step.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
 
                     CustomizePromptDisclosure(
                         label: "Shared system prompt",
-                        text: $config.articulatePrompt,
-                        defaultValue: ArticulatePrompt.default,
+                        text: $config.rewritePrompt,
+                        defaultValue: RewritePrompt.default,
                         info: .init(
                             title: "Shared system prompt",
-                            body: "The foundation of every Articulate call. When you trigger Articulate (fixed or custom), Jot sends this text plus a short branch-specific tendency it picks automatically based on your instruction — voice-preserving, shape change, translation, or code. Cleanup has its own separate prompt for transcripts; editing this here does not affect Cleanup. Edit with care — malformed prompts can break Articulate.",
+                            body: "The foundation of every Rewrite call. When you trigger Rewrite or Rewrite with Voice, Jot sends this text plus a short branch-specific tendency it picks automatically based on your instruction — voice-preserving, shape change, translation, or code. Cleanup has its own separate prompt for transcripts; editing this here does not affect Cleanup. Edit with care — malformed prompts can break Rewrite.",
                             helpAnchor: "ai-editable-prompts"
                         )
                     )

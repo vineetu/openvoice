@@ -42,7 +42,7 @@ private enum AppleIntelligenceStreamOutcome {
 /// Thin actor around Apple's on-device `FoundationModels` (`LanguageModelSession`)
 /// so the LLM path has a shape symmetric to the HTTP `LLMClient` branches.
 ///
-/// Called from `LLMClient.transform(...)` and `LLMClient.articulate(...)` when
+/// Called from `LLMClient.transform(...)` and `LLMClient.rewrite(...)` when
 /// the user picks `.appleIntelligence`. The two public methods mirror what the
 /// HTTP code paths need: a clean single-shot `respond(to:)` under a
 /// pre-composed `instructions` string.
@@ -126,7 +126,7 @@ actor AppleIntelligenceClient: AppleIntelligenceClienting {
     /// (`instruction`) and the raw transcript; we return the cleaned text.
     ///
     /// Wraps the transcript in `<transcript>` tags with a trailing framing
-    /// block for the same reason `articulate(...)` below wraps its selection:
+    /// block for the same reason `rewrite(...)` below wraps its selection:
     /// Apple's on-device model is small enough that a raw content-slot string
     /// gets interpreted as an instruction. If the user dictated a question,
     /// the model answers it instead of cleaning it. The tag wrap + explicit
@@ -150,11 +150,11 @@ actor AppleIntelligenceClient: AppleIntelligenceClienting {
         #endif
     }
 
-    /// Articulate a user selection. Mirrors `LLMClient.articulate(...)`: the
+    /// Rewrite a user selection. Mirrors `LLMClient.rewrite(...)`: the
     /// caller composes the combined system prompt (shared invariants +
     /// branch tendency) into `branchPrompt`, and hands us the selection +
     /// the user's (voice or fixed) instruction.
-    func articulate(selectedText: String, instruction: String, branchPrompt: String) async throws -> String {
+    func rewrite(selectedText: String, instruction: String, branchPrompt: String) async throws -> String {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) {
             let combinedInstructions = branchPrompt

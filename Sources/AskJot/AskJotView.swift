@@ -209,7 +209,7 @@ struct AskJotView: View {
 
     private static let starterPrompts: [String] = [
         "How do I change my dictation shortcut?",
-        "What's the difference between Cleanup and Articulate?",
+        "What's the difference between Cleanup and Rewrite?",
         "Why won't a single key work as my hotkey?"
     ]
 

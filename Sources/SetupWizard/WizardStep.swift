@@ -12,19 +12,19 @@ enum WizardStepID: Int, CaseIterable, Identifiable, Sendable {
     // Terminal "you're set up for the basics" card shown right after
     // the Test step succeeds. Skip is the suggested first-run action —
     // most users want to stop here and start using Jot. Continue reveals
-    // the advanced steps (LLM cleanup, Articulate) for power users who
+    // the advanced steps (LLM cleanup, Rewrite) for power users who
     // want to set those up inline. Either way the user can return to
     // Settings → General → Run Setup Wizard later.
     case done
     case cleanup
-    case articulateIntro
+    case rewriteIntro
 
     var id: Int { rawValue }
 
     static var totalCount: Int { allCases.count }
 
     var isFirst: Bool { self == .welcome }
-    var isLast: Bool { self == .articulateIntro }
+    var isLast: Bool { self == .rewriteIntro }
 }
 
 /// Read-only snapshot of step presentation that the wizard shell consumes

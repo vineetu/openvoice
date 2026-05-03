@@ -429,17 +429,17 @@ enum InfoCircleAnchorRegistry {
         ("TranscriptionPane.defaultModel",                "on-device-transcription"),
         ("TranscriptionPane.autoPaste",                   "dictation"),
         ("TranscriptionPane.pressReturnAfterPasting",     "dictation"),
-        ("ArticulatePane.cleanUpTranscriptWithAI",        "cleanup"),
-        ("ArticulatePane.customizePrompt",                "cleanup-prompt"),
+        ("RewritePane.cleanUpTranscriptWithAI",        "cleanup"),
+        ("RewritePane.customizePrompt",                "cleanup-prompt"),
         ("TranscriptionPane.keepLastTranscriptOnClipboard", "dictation"),
 
-        // ArticulatePane
-        ("ArticulatePane.provider",           "ai-cloud-providers"),
-        ("ArticulatePane.baseURL",            "ai-custom-base-url"),
-        ("ArticulatePane.model",              "ai-cloud-providers"),
-        ("ArticulatePane.apiKey",             "ai-custom-base-url"),
-        ("ArticulatePane.testConnection",     "ai-test-connection"),
-        ("ArticulatePane.sharedSystemPrompt", "ai-editable-prompts"),
+        // RewritePane
+        ("RewritePane.provider",           "ai-cloud-providers"),
+        ("RewritePane.baseURL",            "ai-custom-base-url"),
+        ("RewritePane.model",              "ai-cloud-providers"),
+        ("RewritePane.apiKey",             "ai-custom-base-url"),
+        ("RewritePane.testConnection",     "ai-test-connection"),
+        ("RewritePane.sharedSystemPrompt", "ai-editable-prompts"),
 
         // SoundPane — 5 chime rows + volume slider
         ("SoundPane.recordingStart",          "sound-recording-chimes"),
@@ -454,8 +454,8 @@ enum InfoCircleAnchorRegistry {
         ("ShortcutsPane.toggleRecording",     "toggle-recording"),
         ("ShortcutsPane.pushToTalk",          "push-to-talk"),
         ("ShortcutsPane.pasteLastTranscription", "dictation"),
-        ("ShortcutsPane.articulateCustom",    "articulate-custom"),
-        ("ShortcutsPane.articulate",          "articulate-fixed"),
+        ("ShortcutsPane.rewriteWithVoice",    "articulate-custom"),
+        ("ShortcutsPane.rewrite",             "articulate-fixed"),
         ("ShortcutsPane.cancelRecording",     "cancel-recording"),
 
         // VocabularyPane

@@ -5,7 +5,7 @@ import os.log
 final class VoiceInputPipeline {
     enum Owner: Sendable {
         case recorder
-        case articulate
+        case rewrite
     }
 
     struct Token: Equatable, Sendable {
@@ -23,7 +23,7 @@ final class VoiceInputPipeline {
         case audioTooShort(AudioRecording)
         case transcribeBusy
         case transcribeFailed(Error)
-        /// The bound mic dropped off mid-recording during an Articulate or
+        /// The bound mic dropped off mid-recording during a Rewrite or
         /// Ask Jot voice-command session. Voice commands need to be heard
         /// in full, so we discard partial audio and surface this so the
         /// owning controller can show a clear pill error. Recorder-owned
@@ -108,7 +108,7 @@ final class VoiceInputPipeline {
     /// pipeline invokes if the bound device drops off mid-recording (USB
     /// pull, AirPods drop). Recorder hands in a closure that resumes its
     /// stop-continuation so a partial transcript is salvaged.
-    /// Articulate / Ask Jot can register a closure that triggers
+    /// Rewrite / Ask Jot can register a closure that triggers
     /// `cancel()` directly.
     func startRecording(
         owner: Owner,
@@ -196,15 +196,28 @@ final class VoiceInputPipeline {
             throw PipelineError.transcribeFailed(error)
         }
 
+        // Voice-command owners (Rewrite with Voice, future Ask Jot
+        // voice input) explicitly do NOT persist the captured WAV.
+        // Voice instruction audio is intentionally dropped — only the
+        // transcribed text feeds the LLM and lands in the persisted
+        // `RewriteSession`. The capture layer always writes to disk;
+        // clean it up here so success, disconnect, model-missing,
+        // ASR-failure, and short-audio paths all drop the file.
+        // Recorder owners keep their WAV (it's referenced by the
+        // persisted `Recording` row).
+        if token.owner != .recorder {
+            try? FileManager.default.removeItem(at: recording.fileURL)
+        }
+
         guard phaseMatches(token) else {
             throw PipelineError.tokenStale
         }
 
         let disconnected = didDisconnect(token)
-        // Voice-command owners (Articulate, Ask Jot) need the full
+        // Voice-command owners (Rewrite, Ask Jot) need the full
         // instruction or none — half a command produces nonsense
         // output. Recorder owners get success-with-metadata.
-        if disconnected, token.owner == .articulate {
+        if disconnected, token.owner == .rewrite {
             clearIfMatching(token)
             throw PipelineError.disconnectedMidVoiceCommand
         }

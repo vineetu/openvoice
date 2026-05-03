@@ -18,10 +18,10 @@ import os.log
 ///      voice-input UX reads identically to Jot's main dictation flow.
 ///
 /// Deliberately lives at the AskJot layer rather than inside the existing
-/// Recording / Articulate layers — Ask Jot is product-owned infra and has
+/// Recording / Rewrite layers — Ask Jot is product-owned infra and has
 /// its own provider policy (always Apple Intelligence, regardless of the
-/// user's configured Cleanup/Articulate provider). Mixing the provider
-/// logic into the generic Articulate path would leak that policy.
+/// user's configured Cleanup/Rewrite provider). Mixing the provider
+/// logic into the generic Rewrite path would leak that policy.
 ///
 /// NOTE(team2a): call `capture()` from the chatbot mic-button handler.
 /// `capture()` returns the text to place in the chatbot TextField. The
@@ -223,7 +223,7 @@ final class ChatbotVoiceInput: ObservableObject {
             // site doesn't hang waiting for a second tap that will
             // never come. We surface `disconnectedMidVoiceCommand`
             // directly to keep the user-visible state in sync with
-            // Articulate's path.
+            // Rewrite's path.
             let pipelineRef = self.pipeline
             let onDisconnect: @MainActor @Sendable () -> Void = { [weak self] in
                 guard let self else { return }
@@ -243,7 +243,7 @@ final class ChatbotVoiceInput: ObservableObject {
                 }
             }
             let token = try await pipeline.startRecording(
-                owner: .articulate,
+                owner: .rewrite,
                 onDisconnect: onDisconnect
             )
             activeToken = token
@@ -457,7 +457,7 @@ enum VoiceInputError: Error, Equatable {
 /// touching Apple Intelligence. Real calls route through
 /// `AppleIntelligenceCondenser` (spec §8: chatbot condensation is
 /// hardcoded to Apple Intelligence regardless of the user's configured
-/// Articulate provider).
+/// Rewrite provider).
 protocol ChatbotCondenser: Sendable {
     func condense(raw: String) async throws -> String
 }
@@ -474,7 +474,7 @@ extension ChatbotCondenser where Self == AppleIntelligenceCondenser {
 }
 
 /// Production condenser — wraps an `AppleIntelligenceClienting` (Phase 0.6
-/// seam) with the spec §8 condensation prompt. We reuse the `articulate`
+/// seam) with the spec §8 condensation prompt. We reuse the `rewrite`
 /// path (not `transform`) because its instruction/selection framing happens
 /// to match how we want to describe "the spoken question is the selection,
 /// condense it."
@@ -498,12 +498,12 @@ struct AppleIntelligenceCondenser: ChatbotCondenser {
     }
 
     func condense(raw: String) async throws -> String {
-        // We call `articulate(...)` because its content framing ("take
+        // We call `rewrite(...)` because its content framing ("take
         // this selection, follow the instruction, return only the
         // rewrite") is exactly what we need. The "instruction" slot
         // carries our condensation prompt; the "selection" slot carries
         // the raw spoken question.
-        return try await client.articulate(
+        return try await client.rewrite(
             selectedText: raw,
             instruction: "Condense the <selection> into a clear, single question sentence, preserving intent.",
             branchPrompt: Self.prompt

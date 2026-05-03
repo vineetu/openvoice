@@ -64,6 +64,7 @@ struct AboutPane: View {
         .sheet(item: $pendingShareAction) { action in
             PrivacyScanSheet(
                 action: action,
+                modelContext: modelContext,
                 llmConfiguration: llmConfiguration,
                 onProceed: handleShare
             )
@@ -379,14 +380,37 @@ struct AboutPane: View {
         let cutoff = Calendar.current.date(byAdding: .day, value: -90, to: .now) ?? .distantPast
         var descriptor = FetchDescriptor<Recording>(predicate: #Predicate { $0.createdAt >= cutoff })
         descriptor.fetchLimit = 2000
-        guard let recordings = try? modelContext.fetch(descriptor) else { return [] }
-        return recordings.flatMap { recording in
-            var texts: [String] = []
-            if recording.transcript.count >= 10 { texts.append(recording.transcript) }
-            if recording.rawTranscript.count >= 10, recording.rawTranscript != recording.transcript {
-                texts.append(recording.rawTranscript)
-            }
-            return texts
+        var all: [String] = []
+        var seen = Set<String>()
+        let appendIfSensitive: (String) -> Void = { s in
+            guard s.count >= 10 else { return }
+            guard seen.insert(s).inserted else { return }
+            all.append(s)
         }
+        if let recordings = try? modelContext.fetch(descriptor) {
+            for recording in recordings {
+                appendIfSensitive(recording.transcript)
+                if recording.rawTranscript != recording.transcript {
+                    appendIfSensitive(recording.rawTranscript)
+                }
+            }
+        }
+        // Mirror `LogScanner.fetchTranscripts()` — Rewrite session
+        // selection / instruction / output must participate in the
+        // About-pane redaction corpus too. Same count >= 10 threshold,
+        // same dedup so identical strings don't generate duplicate
+        // ranges in `LogRedactor`.
+        var sessionDescriptor = FetchDescriptor<RewriteSession>(
+            predicate: #Predicate { $0.createdAt >= cutoff }
+        )
+        sessionDescriptor.fetchLimit = 2000
+        if let sessions = try? modelContext.fetch(sessionDescriptor) {
+            for s in sessions {
+                appendIfSensitive(s.selectionText)
+                appendIfSensitive(s.instructionText)
+                appendIfSensitive(s.output)
+            }
+        }
+        return all
     }
 }

@@ -8,7 +8,7 @@ import Foundation
 /// respects it immediately without a restart.
 enum SoundEffect: String, CaseIterable, Sendable {
     case recordingStart
-    case articulateStart
+    case rewriteStart
     case recordingStop
     case recordingCancel
     case transcriptionComplete
@@ -16,10 +16,12 @@ enum SoundEffect: String, CaseIterable, Sendable {
 
     /// Bundled filename (WAV, `Resources/Sounds/`). Extension is stripped
     /// because `Bundle.url(forResource:withExtension:)` prefers that shape.
+    /// `rewriteStart`'s asset filename is preserved as `articulate-start`
+    /// to avoid renaming the bundled WAV resource.
     var fileName: String {
         switch self {
         case .recordingStart: return "recording-start"
-        case .articulateStart: return "articulate-start"
+        case .rewriteStart: return "articulate-start"
         case .recordingStop: return "recording-stop"
         case .recordingCancel: return "recording-cancel"
         case .transcriptionComplete: return "transcription-complete"
@@ -29,10 +31,12 @@ enum SoundEffect: String, CaseIterable, Sendable {
 
     /// `@AppStorage` key Settings writes. Used by `SoundPlayer` to gate
     /// playback so a muted effect is silent even if triggered.
+    /// `rewriteStart`'s key is preserved as `jot.sound.articulateStart`
+    /// so users' existing chime preference survives the rename.
     var settingsKey: String {
         switch self {
         case .recordingStart: return "jot.sound.recordingStart"
-        case .articulateStart: return "jot.sound.articulateStart"
+        case .rewriteStart: return "jot.sound.articulateStart"
         case .recordingStop: return "jot.sound.recordingStop"
         case .recordingCancel: return "jot.sound.recordingCancel"
         case .transcriptionComplete: return "jot.sound.transcriptionComplete"

@@ -3,7 +3,7 @@ import os
 @testable import Jot
 
 /// Harness conformer for `AppleIntelligenceClienting`. Returns canned
-/// strings from a FIFO queue for `transform(...)` / `articulate(...)`,
+/// strings from a FIFO queue for `transform(...)` / `rewrite(...)`,
 /// with a controllable `isAvailable` flag and a `blocksUntilCancelled`
 /// mode for the I1 cancel-doesn't-cancel regression.
 ///
@@ -14,7 +14,7 @@ import os
 /// lock is belt-and-suspenders for strict-concurrency.
 ///
 /// **`blocksUntilCancelled` mode:** when the seed selects this, the
-/// next `articulate(...)` call awaits a continuation that's only
+/// next `rewrite(...)` call awaits a continuation that's only
 /// resumed when the in-flight task is cancelled. This is the only way
 /// the I1 regression can drive `condensationTaskWasCancelled == true`
 /// — every other seed completes synchronously.
@@ -22,13 +22,13 @@ actor StubAppleIntelligence: AppleIntelligenceClienting {
     private let availabilityFlag = OSAllocatedUnfairLock<Bool>(initialState: true)
 
     private var transformResponses: [String] = []
-    private var articulateResponses: [String] = []
-    private var blocksOnArticulate: Bool = false
+    private var rewriteResponses: [String] = []
+    private var blocksOnRewrite: Bool = false
 
-    /// `true` after a `blocksUntilCancelled` articulate call observed
+    /// `true` after a `blocksUntilCancelled` rewrite call observed
     /// `Task.isCancelled` before completing. Read by the I1 flow
     /// method to populate `AskJotResult.condensationTaskWasCancelled`.
-    private(set) var lastArticulateWasCancelled: Bool = false
+    private(set) var lastRewriteWasCancelled: Bool = false
 
     init(seed: AppleIntelligenceSeed = .stub) {
         switch seed {
@@ -38,7 +38,7 @@ actor StubAppleIntelligence: AppleIntelligenceClienting {
             availabilityFlag.withLock { $0 = false }
         case .blocksUntilCancelled:
             availabilityFlag.withLock { $0 = true }
-            self.blocksOnArticulate = true
+            self.blocksOnRewrite = true
         }
     }
 
@@ -47,9 +47,9 @@ actor StubAppleIntelligence: AppleIntelligenceClienting {
         transformResponses.append(response)
     }
 
-    /// Enqueue a canned response for the next `articulate(...)` call.
-    func enqueueArticulate(_ response: String) {
-        articulateResponses.append(response)
+    /// Enqueue a canned response for the next `rewrite(...)` call.
+    func enqueueRewrite(_ response: String) {
+        rewriteResponses.append(response)
     }
 
     // MARK: - AppleIntelligenceClienting
@@ -68,14 +68,14 @@ actor StubAppleIntelligence: AppleIntelligenceClienting {
         return transformResponses.removeFirst()
     }
 
-    func articulate(
+    func rewrite(
         selectedText: String,
         instruction: String,
         branchPrompt: String
     ) async throws -> String {
         guard isAvailable else { throw LLMError.appleIntelligenceUnavailable }
 
-        if blocksOnArticulate {
+        if blocksOnRewrite {
             // Suspend until cancelled. Setting the flag *before*
             // throwing CancellationError gives the harness a stable
             // signal to read in `AskJotResult.condensationTaskWasCancelled`.
@@ -87,11 +87,11 @@ actor StubAppleIntelligence: AppleIntelligenceClienting {
             throw CancellationError()
         }
 
-        guard !articulateResponses.isEmpty else { return selectedText }
-        return articulateResponses.removeFirst()
+        guard !rewriteResponses.isEmpty else { return selectedText }
+        return rewriteResponses.removeFirst()
     }
 
-    /// Stub `AIChatRequest` streaming. Yields each enqueued articulate
+    /// Stub `AIChatRequest` streaming. Yields each enqueued rewrite
     /// response (one per turn) split into coarse chunks so consumers
     /// observe the `for try await` loop. No tool-calling — the stub
     /// surface ignores `request.showFeatureTool`.
@@ -118,8 +118,8 @@ actor StubAppleIntelligence: AppleIntelligenceClienting {
     }
 
     private func dequeueChatResponse(prompt: [AIChatMessage]) -> String {
-        if !articulateResponses.isEmpty {
-            return articulateResponses.removeFirst()
+        if !rewriteResponses.isEmpty {
+            return rewriteResponses.removeFirst()
         }
         // Default echo of the last user prompt so flow tests that
         // don't enqueue a chat response still get something readable.
@@ -131,11 +131,11 @@ actor StubAppleIntelligence: AppleIntelligenceClienting {
     private func suspendForever() async {
         await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in
             // Intentionally never resumed — the cancellation handler
-            // throws CancellationError out of `articulate(...)`.
+            // throws CancellationError out of `rewrite(...)`.
         }
     }
 
     private func markCancelled() {
-        lastArticulateWasCancelled = true
+        lastRewriteWasCancelled = true
     }
 }

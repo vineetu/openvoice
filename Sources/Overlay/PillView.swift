@@ -51,7 +51,7 @@ struct PillView: View {
                 }
             case .rewriting:
                 pillBody {
-                    ArticulatingContent(reduceMotion: reduceMotion)
+                    RewritingContent(reduceMotion: reduceMotion)
                 }
             case .transforming:
                 pillBody {
@@ -277,9 +277,9 @@ private struct ThreeDotLoader: View {
     }
 }
 
-// MARK: - Articulating
+// MARK: - Rewriting
 
-private struct ArticulatingContent: View {
+private struct RewritingContent: View {
     let reduceMotion: Bool
     @State private var pulse = false
 
@@ -290,7 +290,7 @@ private struct ArticulatingContent: View {
                 .frame(width: 7, height: 7)
             ThreeDotLoader(reduceMotion: reduceMotion)
             Spacer(minLength: 4)
-            Text("Articulating")
+            Text("Rewriting")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(pulse && !reduceMotion ? 0.6 : 0.9))
                 .animation(
@@ -308,7 +308,7 @@ private struct ArticulatingContent: View {
 // MARK: - Condensing (Ask Jot voice input)
 
 /// Shown while the Ask Jot voice-input pipeline is running
-/// Articulate-based condensation on the raw transcript before sending
+/// Rewrite-based condensation on the raw transcript before sending
 /// it to the chatbot. Same cadence as `TransformingContent`.
 private struct CondensingContent: View {
     let reduceMotion: Bool

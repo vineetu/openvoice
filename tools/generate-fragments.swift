@@ -162,19 +162,19 @@ guard let cleanupBody = enumBody("CleanupPass", in: source) else {
 }
 let cleanupPasses = parseCases(cleanupBody).map { $0.raw }
 
-guard let invariantBody = enumBody("ArticulateInvariant", in: source) else {
-    FileHandle.standardError.write("generate-fragments: missing ArticulateInvariant enum\n".data(using: .utf8)!)
+guard let invariantBody = enumBody("RewriteInvariant", in: source) else {
+    FileHandle.standardError.write("generate-fragments: missing RewriteInvariant enum\n".data(using: .utf8)!)
     exit(1)
 }
 let invariants = parseCases(invariantBody).map { $0.raw }
 
-// ArticulateBranch lives in ArticulateInstructionClassifier.swift.
+// RewriteBranch lives in RewriteInstructionClassifier.swift.
 let branchFile = repoRoot
     .appendingPathComponent("Sources").appendingPathComponent("LLM")
-    .appendingPathComponent("ArticulateInstructionClassifier.swift")
+    .appendingPathComponent("RewriteInstructionClassifier.swift")
 guard let branchSource = try? String(contentsOf: branchFile, encoding: .utf8),
-      let branchBody = enumBody("ArticulateBranch", in: branchSource) else {
-    FileHandle.standardError.write("generate-fragments: missing ArticulateBranch enum\n".data(using: .utf8)!)
+      let branchBody = enumBody("RewriteBranch", in: branchSource) else {
+    FileHandle.standardError.write("generate-fragments: missing RewriteBranch enum\n".data(using: .utf8)!)
     exit(1)
 }
 // Branch cases have no explicit raw value; map the symbol to a human label.
@@ -204,8 +204,8 @@ let retention = retentionSymbols.map { retentionLabels[$0] ?? $0 }
 // DefaultShortcuts
 let toggleRecording        = staticLetString("toggleRecording",        in: source) ?? "⌥Space"
 let pushToTalk             = staticLetString("pushToTalk",             in: source) ?? "(unbound)"
-let articulateCustom       = staticLetString("articulateCustom",       in: source) ?? "(unbound)"
-let articulateFixed        = staticLetString("articulateFixed",        in: source) ?? "(unbound)"
+let rewriteWithVoice       = staticLetString("rewriteWithVoice",       in: source) ?? "(unbound)"
+let rewrite                = staticLetString("rewrite",                in: source) ?? "(unbound)"
 let pasteLast              = staticLetString("pasteLast",              in: source) ?? "(unbound)"
 
 // Provider costs
@@ -262,16 +262,16 @@ write("costs", costLines)
 let shortcutLines = [
     "- Toggle recording: \(toggleRecording)",
     "- Push-to-talk: \(pushToTalk)",
-    "- Articulate (Custom): \(articulateCustom)",
-    "- Articulate (Fixed): \(articulateFixed)",
+    "- Rewrite with Voice: \(rewriteWithVoice)",
+    "- Rewrite: \(rewrite)",
     "- Paste last: \(pasteLast)",
 ].joined(separator: "\n")
 write("default-shortcuts", shortcutLines)
 
 // Individual defaults used inline in the base prose.
 write("default-shortcuts-toggle", toggleRecording)
-write("default-shortcuts-articulate-custom", articulateCustom)
-write("default-shortcuts-articulate-fixed", articulateFixed)
+write("default-shortcuts-rewrite-with-voice", rewriteWithVoice)
+write("default-shortcuts-rewrite", rewrite)
 write("default-shortcuts-paste-last", pasteLast)
 
 let emittedCount = 11

@@ -21,7 +21,7 @@ struct WizardFlowTests {
         let outcome = try await harness.runWizard(grants: .allGranted)
 
         // Welcome → Permissions → Model → Microphone → Shortcuts → Test
-        // → Done → Cleanup → ArticulateIntro (terminal). The 6 basic
+        // → Done → Cleanup → RewriteIntro (terminal). The 6 basic
         // steps from the brief are the prefix; `.done` onward are the
         // optional advanced steps that always advance.
         #expect(outcome.stepsVisited.first == .welcome)

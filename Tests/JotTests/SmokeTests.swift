@@ -8,7 +8,7 @@ import Testing
 /// the eight protocol seams).
 ///
 /// Phase 1.4-1.7 fill this target with the four `JotHarness` flow tests
-/// (`dictate`, `articulateCustom`, `askJotVoice`, `runWizard`). Until
+/// (`dictate`, `rewriteWithVoice`, `askJotVoice`, `runWizard`). Until
 /// then this single test is the only thing exercising the bundle.
 struct SmokeTests {
     @Test func smokeTrivial() {

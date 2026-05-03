@@ -43,8 +43,8 @@ final class PillViewModel: ObservableObject {
 
     private var recorderCancellable: AnyCancellable?
     private var deliveryCancellable: AnyCancellable?
-    private var articulateCancellable: AnyCancellable?
-    private var articulateResultCancellable: AnyCancellable?
+    private var rewriteCancellable: AnyCancellable?
+    private var rewriteResultCancellable: AnyCancellable?
     /// Subscription that surfaces `RecorderController.lastFallbackNotice`
     /// as a `.notice(...)` pill once a fresh `lastResult` has landed and
     /// the success pill has dismissed. See `docs/plans/mic-disconnect-handling.md`.
@@ -52,12 +52,12 @@ final class PillViewModel: ObservableObject {
 
     private weak var recorder: RecorderController?
     private weak var delivery: DeliveryService?
-    private weak var articulateController: ArticulateController?
+    private weak var rewriteController: RewriteController?
 
-    init(recorder: RecorderController, delivery: DeliveryService, articulateController: ArticulateController? = nil) {
+    init(recorder: RecorderController, delivery: DeliveryService, rewriteController: RewriteController? = nil) {
         self.recorder = recorder
         self.delivery = delivery
-        self.articulateController = articulateController
+        self.rewriteController = rewriteController
 
         recorderCancellable = recorder.$state
             .receive(on: DispatchQueue.main)
@@ -93,17 +93,17 @@ final class PillViewModel: ObservableObject {
                 }
             }
 
-        if let articulateController {
-            articulateCancellable = articulateController.$state
+        if let rewriteController {
+            rewriteCancellable = rewriteController.$state
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] state in
-                    self?.articulateStateChanged(state)
+                    self?.rewriteStateChanged(state)
                 }
-            articulateResultCancellable = articulateController.$lastArticulation
+            rewriteResultCancellable = rewriteController.$lastRewrite
                 .compactMap { $0 }
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] result in
-                    self?.showArticulateSuccess(result)
+                    self?.showRewriteSuccess(result)
                 }
         }
     }
@@ -166,10 +166,10 @@ final class PillViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Articulate transitions
+    // MARK: - Rewrite transitions
 
-    private func articulateStateChanged(_ articulateState: ArticulateController.ArticulateState) {
-        switch articulateState {
+    private func rewriteStateChanged(_ rewriteState: RewriteController.RewriteState) {
+        switch rewriteState {
         case .idle:
             switch self.state {
             case .success, .error, .notice, .hidden, .condensing:
@@ -196,7 +196,7 @@ final class PillViewModel: ObservableObject {
         }
     }
 
-    func showArticulateSuccess(_ result: String) {
+    func showRewriteSuccess(_ result: String) {
         stopTick()
         transition(to: .success(preview: Self.previewText(result)))
         scheduleDismiss(after: Self.successLinger)

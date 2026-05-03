@@ -124,7 +124,7 @@ public actor ErrorLog: LogSink {
 /// shipped Swift macOS app) we fall through to the raw mangled name
 /// rather than skip the frame.
 enum StackTraceCapture {
-    /// Maximum number of demangled frames emitted. The Articulate path
+    /// Maximum number of demangled frames emitted. The Rewrite path
     /// is the deepest in the app and runs ~6-8 user frames before
     /// hitting the system tail, so 12 leaves comfortable headroom.
     static let maxFrames = 12

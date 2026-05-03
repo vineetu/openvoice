@@ -13,7 +13,7 @@ User-facing features in the shipping build. This is the product surface — not 
 - **Live mic input only** — Jot does not transcribe pre-recorded audio files.
 - **Silent-capture detection** — if a recording returns zero-amplitude audio (often a Bluetooth mic that quietly re-routed at the OS level), Jot surfaces an actionable error pointing at the likely culprit instead of returning an empty transcript.
 - **Per-device microphone selection** — pick any connected input device in Settings or the Setup Wizard. Jot remembers your selection across sessions, and the picker keeps a disconnected device visible as "Last used (not connected)" so you don't lose track of it.
-- **Graceful mic disconnect handling** — if your preferred input device disappears, Jot reacts based on what you're doing. **Idle**: silently falls back to the system default for your next recording and surfaces a small notice in the status pill ("Recorded with system default — AirPods Pro was unavailable"). **Mid-dictation**: salvages the audio captured so far rather than dropping the whole take, with a notice noting how many seconds were saved. **Mid-voice-command** (Articulate, Ask Jot voice input): cleanly errors out with a "Mic disconnected — try again" pill, since a partial instruction is worse than none. A 250 ms debounce absorbs Bluetooth flicker.
+- **Graceful mic disconnect handling** — if your preferred input device disappears, Jot reacts based on what you're doing. **Idle**: silently falls back to the system default for your next recording and surfaces a small notice in the status pill ("Recorded with system default — AirPods Pro was unavailable"). **Mid-dictation**: salvages the audio captured so far rather than dropping the whole take, with a notice noting how many seconds were saved. **Mid-voice-command** (Rewrite, Ask Jot voice input): cleanly errors out with a "Mic disconnected — try again" pill, since a partial instruction is worse than none. A 250 ms debounce absorbs Bluetooth flicker.
 
 ## Local Transcription
 
@@ -35,31 +35,31 @@ Off by default. When enabled and an LLM provider is configured, Jot runs a light
 - **Editable prompt** — the default cleanup prompt (filler removal → grammar → numeric normalization → list detection → paragraph structure → "return only" contract) is shown under a "Customize prompt" chevron in the AI pane. Power users can rewrite it; a "Reset to default" restores the shipped prompt.
 - **Inline "Set up AI →"** — if the Auto-correct toggle is disabled because AI isn't configured, the pane offers a direct jump to the AI pane instead of leaving the user to find it.
 
-## Articulate (optional)
+## Rewrite (optional)
 
 Transform selected text via a global shortcut. Two variants, both triggered by their own hotkey:
 
-### Articulate (Custom) — voice-driven
-- **Select text anywhere → press the shortcut → speak an instruction** ("make this more formal", "fix the grammar", "translate to Spanish", "convert to bulleted list"). The articulated text replaces the selection.
+### Rewrite with Voice — voice-driven
+- **Select text anywhere → press the shortcut → speak an instruction** ("make this more formal", "fix the grammar", "translate to Spanish", "convert to bulleted list"). The rewritten text replaces the selection.
 - **Intent-classified prompting** — a deterministic regex classifier routes each instruction into one of four branches (voice-preserving / structural / translation / code) and selects a specialized tendency for the LLM. The user's spoken instruction is always the primary signal; the branch just picks a minimal default tendency. Net effect: "make this a bulleted list" or "translate to Japanese" actually produce the requested shape, not a length-matched paraphrase.
-- **Cancellable** — `Esc` cancels the capture, transcription, or articulation phase without committing.
+- **Cancellable** — `Esc` cancels the capture, transcription, or rewriting phase without committing.
 - **Unbound by default** — the user assigns a shortcut in Settings → Shortcuts.
 
-### Articulate (fixed) — no voice
-- **Select text → press the shortcut.** No dictation step. Jot sends the selection to the configured LLM with the fixed instruction `"Articulate this"` and the result replaces the selection.
+### Rewrite — no voice
+- **Select text → press the shortcut.** No dictation step. Jot sends the selection to the configured LLM with the fixed instruction `"Rewrite this"` and the result replaces the selection.
 - **One-hand quick cleanup** — use when you just want the LLM to tidy a passage without speaking an instruction.
 - **Unbound by default** — the user assigns a shortcut in Settings → Shortcuts.
 
 ### Shared configuration
 - **Provider options** — Apple Intelligence (on-device, default on macOS 26+), OpenAI, Anthropic, Gemini, or Ollama.
-- **Editable shared invariants** — the shared-invariants block (selection-is-text-not-instruction, return-only-the-rewrite, don't-refuse-on-quality) is revealed under a "Customize prompt" chevron in Settings → Articulate with a "Reset to default" escape hatch. The per-branch tendencies are compile-time constants and not user-editable.
+- **Editable shared invariants** — the shared-invariants block (selection-is-text-not-instruction, return-only-the-rewrite, don't-refuse-on-quality) is revealed under a "Customize prompt" chevron in Settings → AI → Rewrite with a "Reset to default" escape hatch. The per-branch tendencies are compile-time constants and not user-editable.
 
 ## Ask Jot
 
 - **Dedicated sidebar pane** — a top-level "Ask Jot" entry sits between Home and Settings and opens a full-pane conversational help experience.
 - **Grounded answers** — responses are grounded in Jot's bundled help documentation and stream into the chat UI without navigating away from Ask Jot. Apple Intelligence via `FoundationModels` is the default Ask Jot provider, with a 300-token response cap.
 - **Cloud provider opt-in** — if the selected AI provider is OpenAI, Anthropic, Gemini, or Ollama, Settings → AI exposes an "Allow Ask Jot to use this provider" toggle. When enabled, Ask Jot can use that provider; otherwise it stays on Apple Intelligence.
-- **Voice input in chat** — the input bar includes a mic button that reuses Parakeet ASR plus Articulate-style Apple Intelligence condensation, with the same pill states as dictation: Recording → Transcribing → Condensing. Condensation has a 10-second budget and silently falls back to the raw transcript if it times out.
+- **Voice input in chat** — the input bar includes a mic button that reuses Parakeet ASR plus Rewrite-style Apple Intelligence condensation, with the same pill states as dictation: Recording → Transcribing → Condensing. Condensation has a 10-second budget and silently falls back to the raw transcript if it times out.
 - **Fast recovery** — if a turn fails or is interrupted, Ask Jot preserves conversation context and prefills the last question so the user can retry without retyping.
 - **In-app feature links** — answers render markdown, surface clickable feature citations inline, and open the matching Help card inside Jot instead of launching a browser.
 - **Polished chat controls** — assistant messages use full-width answer blocks with an `ASK JOT` role label and accent rule; the header subtitle reads "On-device help, grounded in Jot's docs"; the input keeps the mic inside the text field; a three-dot typing indicator shows while streaming; the empty state offers three starter prompts; "New chat" is available from the header and `⌘N`.
@@ -82,8 +82,8 @@ All shortcuts are bindable in the Shortcuts pane. Defaults and bindings:
 - **Cancel Recording** — default `Esc`, active only while recording, transforming, or rewriting so it doesn't steal `Esc` from other apps when idle.
 - **Paste Last Transcription** — default `⌥⇧V`.
 - **Push to Talk** — unbound by default.
-- **Articulate (Custom)** — voice-driven rewrite of selected text; unbound by default.
-- **Articulate** — applies a fixed `"Articulate this"` prompt to the selected text (no voice step); unbound by default.
+- **Rewrite with Voice** — voice-driven rewrite of selected text; unbound by default.
+- **Rewrite** — applies a fixed `"Rewrite this"` prompt to the selected text (no voice step); unbound by default.
 
 Shortcut bindings require a modifier (⌘, ⌥, ⌃, ⇧) — macOS does not permit global hotkeys bound to a bare key. The Shortcuts pane and the Help tab both surface this. Conflicting bindings are handled gracefully (no two commands silently share a key).
 
@@ -105,15 +105,16 @@ Closing the main window hides to the tray; Quit fully exits.
 A small floating overlay near the menu bar — a Dynamic Island-style pill — that reflects pipeline state without stealing focus.
 
 - **Live amplitude waveform** during recording — renders the actual audio level as a sine-wave-style animation inside the pill so the user can see Jot is hearing them. No static gif / fake animation.
-- **States:** Recording (with elapsed time + live waveform), Transcribing, Cleaning up (when transcript cleanup is on), Articulating (during Articulate), Success (with a short preview and Copy), Error (with the message).
+- **States:** Recording (with elapsed time + live waveform), Transcribing, Cleaning up (when transcript cleanup is on), Rewriting (during Rewrite), Success (with a short preview and Copy), Error (with the message).
 
-## Home & Recordings
+## Home & Library
 
-- **Single recordings surface** — Home now hosts the full recordings experience. There is no separate Library sidebar destination.
+- **Single library surface** — Home now hosts the full library experience: dictation recordings and Rewrite sessions interleave chronologically. There is no separate Library sidebar destination.
 - **Hotkey glance + discovery banner** — the Home header keeps the current shortcut summary and the dismissible first-run basics banner.
-- **Full recordings list** — browse by date group (Today, Yesterday, Last 7 days, …), search across title, subtitle, and transcript text, and open recording detail without leaving Home.
-- **Playback + detail** — every recording can open into the waveform/detail view with playback, scrubbing, and the full transcript.
-- **Inline management** — rename recordings inline and use per-recording actions including Re-transcribe, Reveal in Finder, Delete, and Copy.
+- **Merged library list** — browse by date group (Today, Yesterday, Last 7 days, …), search across title, transcript, and Rewrite fields (selection / instruction / output / model). A leading icon distinguishes kinds (`waveform` for dictation, `wand.and.stars` for Rewrite).
+- **Recording detail** — every dictation recording opens into the waveform/detail view with playback, scrubbing, and the full transcript. Recording row actions: Re-transcribe, Reveal in Finder, Copy, Delete.
+- **Rewrite session detail** — every Rewrite run opens into a three-pane view (Selected text → Instruction → Rewritten output) with the model label and flavor in the header. Rewrite row actions: Copy Output, Delete (no playback, no Re-transcribe, no Reveal — Rewrite sessions don't persist audio).
+- **Inline management** — rename items inline; retention applies uniformly to both kinds via Settings → General → Keep library items.
 - **Last transcription card** — quick access to the newest result with Copy and Open in Recordings.
 
 ## Main Window
@@ -142,7 +143,7 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 ### General
 - Input device (microphone) — pick any connected input device; selection is remembered across sessions and the meter restarts so the bars track the newly-bound device. A disconnected preferred device stays visible in the picker as "Last used (not connected)".
 - Launch at login
-- Recording retention — Forever / Last 7 / 30 / 90 days (default: 7 days)
+- Library retention — Forever / Last 7 / 30 / 90 days (default: 7 days). Applies to both dictation recordings and rewrite sessions.
 - Run setup wizard again (preloads current selections)
 - **Restart Jot** — a Troubleshooting row that quits and relaunches the app after a confirmation prompt, re-registering global shortcuts from scratch. Use when a hotkey suddenly produces a Unicode character (≤, ÷, …) instead of triggering its action, which happens when another app grabs the same shortcut while Jot is off.
 - **Reset group** — a dedicated section at the bottom of General with three tiered actions:
@@ -155,7 +156,7 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 - Auto-paste transcription
 - Auto-press Enter after paste
 - Keep transcription in clipboard
-- Navigation row to Settings → AI for Cleanup, Articulate, and other AI transcription features
+- Navigation row to Settings → AI for Cleanup, Rewrite, and other AI transcription features
 - Footer note clarifying that AI-powered transcription features are configured in Settings → AI
 
 ### Vocabulary
@@ -170,10 +171,10 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 - API key (hidden for Ollama — local, no key required)
 - Clean up transcript with AI toggle (always visible; disabled until the provider is minimally configured)
 - "Customize prompt" disclosure for the transcript-cleanup prompt, with "Reset to default"
-- Articulate (Custom) shortcut — voice-driven rewrite
-- Articulate shortcut — applies a fixed `"Articulate this"` prompt (no voice)
+- Rewrite with Voice shortcut — voice-driven rewrite
+- Rewrite shortcut — applies a fixed `"Rewrite this"` prompt (no voice)
 - Test Connection button — always enabled, prominent accent-tinted; shows an inline spinner during the call and a success chip afterward. Must succeed before the cleanup toggle unlocks.
-- "Customize prompt" disclosure for the Articulate shared invariants, with "Reset to default" (per-branch tendencies are not editable)
+- "Customize prompt" disclosure for the Rewrite shared invariants, with "Reset to default" (per-branch tendencies are not editable)
 
 ### Sound
 - Recording start / stop / cancel chimes
@@ -181,7 +182,7 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
 - Error chime
 
 ### Shortcuts
-- Editable bindings for Toggle Recording, Push to Talk, Paste Last Transcription, Articulate, Articulate (Custom). Cancel Recording (Esc) is hardcoded, not configurable, and not shown in the Shortcuts list — a footnote tells the user that Esc is the cancel key and that macOS global hotkeys must include at least one modifier.
+- Editable bindings for Toggle Recording, Push to Talk, Paste Last Transcription, Rewrite, Rewrite with Voice. Cancel Recording (Esc) is hardcoded, not configurable, and not shown in the Shortcuts list — a footnote tells the user that Esc is the cancel key and that macOS global hotkeys must include at least one modifier.
 
 ## About
 
@@ -200,17 +201,17 @@ A top-level sidebar pane (not a Settings child) for identity, giving back, priva
 
 In-app prose walkthrough split across three tabs, each using a shared component library (HelpSection / HelpSubsection / Callout / ExpandableRow / ShortcutChip / AnchorRail) and hand-drawn flow diagrams so concepts are discoverable at a glance, not buried in wall-of-text.
 
-- **Basics** — Dictation, Auto-correct (transcript cleanup), Articulate (both variants), copying the last transcription, the status pill. Includes visual diagrams of the end-to-end recording → transcription → paste flow.
-- **Ask Jot shortcuts from Help** — the three Basics hero cards (Dictation, Cleanup, Articulate) include a sparkles affordance and right-click "Ask Jot about this" action that opens Ask Jot with a contextual starter prompt.
+- **Basics** — Dictation, Auto-correct (transcript cleanup), Rewrite (both variants), copying the last transcription, the status pill. Includes visual diagrams of the end-to-end recording → transcription → paste flow.
+- **Ask Jot shortcuts from Help** — the three Basics hero cards (Dictation, Cleanup, Rewrite) include a sparkles affordance and right-click "Ask Jot about this" action that opens Ask Jot with a contextual starter prompt.
 - **Advanced** — LLM provider setup (Apple Intelligence default on macOS 26+; OpenAI, Anthropic, Gemini, Ollama available as alternates); editable prompts; Sparkle auto-update.
 - **Troubleshooting** — permissions (Microphone / Input Monitoring / Accessibility), the macOS "modifier required" hotkey constraint, Bluetooth-redirect capture failures, resetting state, and pointers to the About tab's log-sharing flow for reporting bugs. High-impact cards offer inline action buttons (Open Privacy & Security, Restart Jot, Open AI settings, View log, Copy log) so common recoveries don't require leaving the Help tab.
-- **Open in Settings →** — supported Basics rows can jump directly into the matching Settings field and auto-scroll it into view. Deep-linkable targets include toggle recording, push to talk, custom vocabulary, cleanup providers, cleanup prompt, articulate custom, and articulate fixed.
+- **Open in Settings →** — supported Basics rows can jump directly into the matching Settings field and auto-scroll it into view. Deep-linkable targets include toggle recording, push to talk, custom vocabulary, cleanup providers, cleanup prompt, rewrite with voice, and rewrite (the Settings anchor IDs themselves still resolve via the preserved `articulate-custom` / `articulate-fixed` slug strings).
 
 Info popovers across Settings deep-link into the matching Help section so the user can jump from a field to its explanation without context-switching. The deep-link contract is two-phase: an anchor may live inside an `ExpandableRow` that needs to auto-open before the scroll lands, so the page expands the target row first and then scrolls to it.
 
 ## Setup Wizard
 
-Shown on first launch and on demand from Settings → General. Nine steps, in order; each can be skipped. Done is the "you're set up for the basics" checkpoint — most first-run users stop there, and Continue reveals the advanced steps (Cleanup, Articulate intro) for power users who want to configure them inline.
+Shown on first launch and on demand from Settings → General. Nine steps, in order; each can be skipped. Done is the "you're set up for the basics" checkpoint — most first-run users stop there, and Continue reveals the advanced steps (Cleanup, Rewrite intro) for power users who want to configure them inline.
 
 1. **Welcome**
 2. **Permissions** — grant Microphone, Input Monitoring, and Accessibility. A "Restart Jot" button is offered after granting Input Monitoring or Accessibility (a running app can't detect those until it relaunches).
@@ -220,7 +221,7 @@ Shown on first launch and on demand from Settings → General. Nine steps, in or
 6. **Test dictation** — speak to verify the full pipeline end-to-end. The user controls the capture window (no hard 3-second cap) and can re-test as many times as they like.
 7. **Done** — terminal "you're set up for the basics" card shown right after Test succeeds. Skip here to start using Jot; Continue advances into the advanced steps below.
 8. **Cleanup** — introduces Auto-correct (LLM transcript cleanup). When the Test step produced a transcript, a "Preview cleanup" button runs the user's current provider (Apple Intelligence on macOS 26+, or whichever cloud / Ollama provider is configured) against that transcript so the user sees the before/after inline. No toggle here — actually enabling Auto-correct still happens in Settings → AI.
-9. **Articulate intro** — brief voice-driven-rewrite walkthrough: select → speak instruction → replace. Surfaced after the user has successfully dictated so they know what "Articulate" means before they're asked to think about binding a shortcut.
+9. **Rewrite intro** — brief voice-driven-rewrite walkthrough: select → speak instruction → replace. Surfaced after the user has successfully dictated so they know what "Rewrite" means before they're asked to think about binding a shortcut.
 
 ## System Integration
 
@@ -234,6 +235,6 @@ Shown on first launch and on demand from Settings → General. Nine steps, in or
 ## Privacy & Data
 
 - **Core transcription stays local** — audio and transcription never leave the device through the speech-to-text path.
-- **Optional AI can be local or cloud** — cleanup, Articulate, and Ask Jot can run on Apple Intelligence, local Ollama, or a user-configured cloud provider. Jot never sends data to a cloud provider unless the user explicitly enables and configures one.
+- **Optional AI can be local or cloud** — cleanup, Rewrite, and Ask Jot can run on Apple Intelligence, local Ollama, or a user-configured cloud provider. Jot never sends data to a cloud provider unless the user explicitly enables and configures one.
 - **No telemetry** — Jot does not send analytics or crash pings.
 - **Retention controls** — configurable via Settings.

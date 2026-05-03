@@ -87,7 +87,7 @@ enum ClipboardSandwich {
         try postShortcut(virtualKey: CGKeyCode(kVK_ANSI_V), flags: .maskCommand)
     }
 
-    /// Post a synthetic ⌘C. Used by ArticulateController to grab the
+    /// Post a synthetic ⌘C. Used by RewriteController to grab the
     /// current selection before recording the instruction. Same
     /// hold-down-modifier hazard applies as `postCommandV`.
     static func postCommandC() throws {

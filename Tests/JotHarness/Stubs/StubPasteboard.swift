@@ -27,6 +27,12 @@ final class StubPasteboard: Pasteboarding {
     /// "no selection" branch.
     var simulatedExternalSelection: String?
 
+    /// When `true`, the next `postCommandV()` throws a synthetic error.
+    /// Drives Phase B's "paste failure after LLM success — row still
+    /// persists" regression test. Cleared after firing once so a single
+    /// failure doesn't bleed into subsequent runs.
+    var simulatePasteVFailureOnce: Bool = false
+
     init() {
         // `withUniqueName()` mints a private named pasteboard so two
         // concurrent stubs in the same process don't collide and so
@@ -70,7 +76,7 @@ final class StubPasteboard: Pasteboarding {
     /// Synthetic ⌘C. If `simulatedExternalSelection` is non-nil, write
     /// it to the pasteboard via `clearContents() + setString(...)` —
     /// this bumps `changeCount` exactly the way a real foreground-app
-    /// copy would, satisfying `ArticulateController.captureSelection`'s
+    /// copy would, satisfying `RewriteController.captureSelection`'s
     /// guard. **Bypasses `history`** — synthetic copies are not
     /// `write(_:)` calls; tests assert on rewrites, not selection
     /// captures.
@@ -78,7 +84,7 @@ final class StubPasteboard: Pasteboarding {
     /// Cleared after one call so a second `postCommandC()` in the
     /// same harness instance exercises the "no selection" branch
     /// (returns without bumping changeCount → controller throws
-    /// `ArticulateError(message: "No text was copied. ...")`).
+    /// `RewriteError(message: "No text was copied. ...")`).
     func postCommandC() throws {
         guard let text = simulatedExternalSelection else { return }
         simulatedExternalSelection = nil
@@ -90,9 +96,16 @@ final class StubPasteboard: Pasteboarding {
     /// is the preceding `write(_:)` call (which lands in `history`
     /// and reflects on `readString()`). The live conformer would post
     /// a CGEvent here that the foreground app consumes as a paste; on
-    /// the stub there is no foreground app to paste into.
+    /// the stub there is no foreground app to paste into. Tests can
+    /// flip `simulatePasteVFailureOnce` to drive the paste-failure
+    /// branch of `RewriteController.pasteReplacement`.
+    enum StubPasteboardError: Error { case syntheticPasteFailed }
+
     func postCommandV() throws {
-        // Intentionally empty.
+        if simulatePasteVFailureOnce {
+            simulatePasteVFailureOnce = false
+            throw StubPasteboardError.syntheticPasteFailed
+        }
     }
 
     /// Synthetic Return. No-op on the stub.

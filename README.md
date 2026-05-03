@@ -14,7 +14,7 @@ Native macOS dictation utility. Press a hotkey, speak, and text appears at your 
 
 ## Advanced features
 
-**Articulate** — Select text, trigger the articulate shortcut, and speak an instruction ("make this more formal", "fix the grammar", "translate to Spanish"). Jot sends the selected text + your voice instruction to an LLM, and the articulated text replaces your selection. A fixed-prompt variant works without a voice instruction — select text, press the shortcut, done. Supports Apple Intelligence, OpenAI, Anthropic, Gemini, and Ollama. The Articulate shared system prompt and the Cleanup prompt are both editable for power users, with a one-click reset.
+**Rewrite** — Select text, trigger the Rewrite with Voice shortcut, and speak an instruction ("make this more formal", "fix the grammar", "translate to Spanish"). Jot sends the selected text + your voice instruction to an LLM, and the rewritten text replaces your selection. A fixed-prompt variant ("Rewrite") works without a voice instruction — select text, press the shortcut, done. Supports Apple Intelligence, OpenAI, Anthropic, Gemini, and Ollama. The Rewrite shared system prompt and the Cleanup prompt are both editable for power users, with a one-click reset.
 
 **Custom vocabulary** — Add proper nouns, acronyms, and domain-specific terms you use often. Jot biases the speech model toward them so product names and jargon get transcribed correctly instead of being guessed at. Edit in Settings → Transcription → Vocabulary.
 
@@ -24,7 +24,7 @@ On first launch, a setup wizard walks you through granting three macOS permissio
 
 If permissions get into a bad state, go to **Settings → General → Reset Permissions** or **Run Setup Wizard** to redo the flow.
 
-To configure Articulate or transcript cleanup, go to **Settings → AI**, pick your provider, and enter your API key (not needed for Ollama or Apple Intelligence). The cleanup toggle and prompt editor live in **Settings → AI** alongside the provider configuration. Ask Jot uses Apple Intelligence by default; if you switch to a non-Apple provider, you can opt that provider into Ask Jot from the same pane. Press **Test Connection** any time you want to verify reachability — it's a manual diagnostic, not a gate.
+To configure Rewrite or transcript cleanup, go to **Settings → AI**, pick your provider, and enter your API key (not needed for Ollama or Apple Intelligence). The cleanup toggle and prompt editor live in **Settings → AI** alongside the provider configuration. Ask Jot uses Apple Intelligence by default; if you switch to a non-Apple provider, you can opt that provider into Ask Jot from the same pane. Press **Test Connection** any time you want to verify reachability — it's a manual diagnostic, not a gate.
 
 ## Stack
 

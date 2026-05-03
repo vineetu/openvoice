@@ -1,27 +1,28 @@
 import AppKit
 import Combine
 import Foundation
+import SwiftData
 import os.log
 
 /// Controller for Jot's selection-rewrite pipeline. Two public entry points:
 ///
-///   * `toggle()` — the "Articulate (Custom)" flow: capture selection via
+///   * `toggle()` — the "Rewrite with Voice" flow: capture selection via
 ///     synthetic ⌘C, record a voice instruction, transcribe it through the
 ///     shared `VoiceInputPipeline`, hand the selection + instruction to the
 ///     LLM, paste the result back.
 ///
-///   * `articulate()` — the fixed-prompt flow: capture selection via
+///   * `rewrite()` — the fixed-prompt flow: capture selection via
 ///     synthetic ⌘C, hand it to the LLM with the literal instruction
-///     `"Articulate this"`, paste the result back. No voice step, no pipeline.
+///     `"Rewrite this"`, paste the result back. No voice step, no pipeline.
 @MainActor
-final class ArticulateController: ObservableObject {
-    /// Published state for both articulate flows. Shared with the status pill.
+final class RewriteController: ObservableObject {
+    /// Published state for both rewrite flows. Shared with the status pill.
     ///
     /// - `capturing`: synthetic ⌘C pending / selection being resolved.
-    /// - `recording`: (Articulate Custom only) mic is live for the voice instruction.
-    /// - `transcribing`: (Articulate Custom only) Parakeet is turning the voice into text.
+    /// - `recording`: (Rewrite with Voice only) mic is live for the voice instruction.
+    /// - `transcribing`: (Rewrite with Voice only) Parakeet is turning the voice into text.
     /// - `rewriting`: LLM call in flight.
-    enum ArticulateState: Equatable, Sendable {
+    enum RewriteState: Equatable, Sendable {
         case idle
         case capturing
         case recording(startedAt: Date)
@@ -29,7 +30,7 @@ final class ArticulateController: ObservableObject {
         case rewriting
         case error(String)
 
-        static func == (lhs: ArticulateState, rhs: ArticulateState) -> Bool {
+        static func == (lhs: RewriteState, rhs: RewriteState) -> Bool {
             switch (lhs, rhs) {
             case (.idle, .idle), (.capturing, .capturing),
                  (.transcribing, .transcribing), (.rewriting, .rewriting):
@@ -44,16 +45,16 @@ final class ArticulateController: ObservableObject {
         }
     }
 
-    /// Hardcoded instruction for the fixed-prompt Articulate flow. Intentional
+    /// Hardcoded instruction for the fixed-prompt Rewrite flow. Intentional
     /// verbatim wording per product choice — do not paraphrase.
-    static let fixedInstruction = "Articulate this"
+    static let fixedInstruction = "Rewrite this"
 
-    @Published private(set) var state: ArticulateState = .idle {
+    @Published private(set) var state: RewriteState = .idle {
         didSet { scheduleAutoRecoveryIfNeeded() }
     }
-    @Published private(set) var lastArticulation: String?
+    @Published private(set) var lastRewrite: String?
 
-    private let log = Logger(subsystem: "com.jot.Jot", category: "Articulate")
+    private let log = Logger(subsystem: "com.jot.Jot", category: "Rewrite")
     private var autoRecoveryTask: Task<Void, Never>?
     private var activeFlowTask: Task<Void, Never>?
     private var activeFixedFlowTask: Task<Void, Never>?
@@ -69,7 +70,7 @@ final class ArticulateController: ObservableObject {
     /// regression-test surface in `Phase4PatchRegressionTests` injects
     /// a custom client via this parameter to force-route Apple
     /// Intelligence and verify the seam wiring. Tier 3 production
-    /// callers go through `AIServices.current(...).articulate(...)`.
+    /// callers go through `AIServices.current(...).rewrite(...)`.
     private let llm: LLMClient?
     private let urlSession: URLSession
     private let appleIntelligence: any AppleIntelligenceClienting
@@ -77,6 +78,13 @@ final class ArticulateController: ObservableObject {
     private let permissions: any PermissionsObserving
     private let pasteboard: any Pasteboarding
     private let logSink: any LogSink
+    /// SwiftData context for persisting `RewriteSession` rows. Same
+    /// `mainContext` instance as `RecordingPersister` and
+    /// `RetentionService`. Optional so existing test seams that build
+    /// a `RewriteController` without a context can keep compiling —
+    /// when `nil`, persistence is skipped (the rewrite paste-back
+    /// path is unaffected).
+    private let modelContext: ModelContext?
 
     init(
         pipeline: VoiceInputPipeline,
@@ -84,6 +92,7 @@ final class ArticulateController: ObservableObject {
         appleIntelligence: any AppleIntelligenceClienting,
         pasteboard: any Pasteboarding,
         llmConfiguration: LLMConfiguration,
+        modelContext: ModelContext? = nil,
         llm: LLMClient? = nil,
         permissions: (any PermissionsObserving)? = nil,
         logSink: any LogSink = ErrorLog.shared
@@ -94,6 +103,7 @@ final class ArticulateController: ObservableObject {
         self.urlSession = urlSession
         self.appleIntelligence = appleIntelligence
         self.llmConfiguration = llmConfiguration
+        self.modelContext = modelContext
         self.permissions = permissions ?? PermissionsService.shared
         self.logSink = logSink
     }
@@ -102,7 +112,7 @@ final class ArticulateController: ObservableObject {
     /// custom `LLMClient` via `init(llm:)`, route through that instance
     /// directly so the seam stays addressable; otherwise fall through
     /// to the live dispatcher.
-    private func articulateService() -> any AIService {
+    private func rewriteService() -> any AIService {
         if let llm {
             return DirectLLMClientAIService(client: llm)
         }
@@ -114,9 +124,32 @@ final class ArticulateController: ObservableObject {
         )
     }
 
-    // MARK: - Articulate (Custom) — voice-driven flow
+    /// Snapshot the human-readable model label at the moment the
+    /// service is resolved. Apple Intelligence stores just the
+    /// provider's `displayName` (no SKU surface for FoundationModels);
+    /// every other provider stores `"<displayName> · <effectiveModel>"`.
+    /// Falls back to `displayName` alone when `effectiveModel(for:)`
+    /// is empty — never produces a trailing dot.
+    ///
+    /// Composition uses `effectiveModel(for:)` (with `provider.defaultModel`
+    /// fallback) rather than the raw `model(for:)` so the label reflects
+    /// the SKU that will actually answer. See plan §3 for the full rule.
+    private func snapshotModelLabel() -> String {
+        let provider = llmConfiguration.provider
+        let display = provider.displayName
+        if provider == .appleIntelligence {
+            return display
+        }
+        let effective = llmConfiguration.effectiveModel(for: provider)
+        if effective.isEmpty {
+            return display
+        }
+        return "\(display) · \(effective)"
+    }
 
-    /// Articulate (Custom). Capture selection, then record a voice instruction;
+    // MARK: - Rewrite with Voice — voice-driven flow
+
+    /// Rewrite with Voice. Capture selection, then record a voice instruction;
     /// on the second toggle press, stop + transcribe + LLM + paste.
     func toggle() async {
         switch state {
@@ -127,7 +160,7 @@ final class ArticulateController: ObservableObject {
         case .recording:
             resumeSecondToggle()
         case .capturing, .transcribing, .rewriting:
-            log.info("toggle() ignored — articulate in progress (\(String(describing: self.state)))")
+            log.info("toggle() ignored — rewrite in progress (\(String(describing: self.state)))")
         }
     }
 
@@ -158,15 +191,15 @@ final class ArticulateController: ObservableObject {
         }
     }
 
-    // MARK: - Articulate — fixed-prompt flow
+    // MARK: - Rewrite — fixed-prompt flow
 
-    /// Articulate (fixed). One-shot: grab the selection, send it to the
-    /// configured LLM with the literal instruction `"Articulate this"` — no
+    /// Rewrite (fixed). One-shot: grab the selection, send it to the
+    /// configured LLM with the literal instruction `"Rewrite this"` — no
     /// voice capture, no classifier step — and paste the result back.
-    func articulate() async {
+    func rewrite() async {
         switch state {
         case .capturing, .recording, .transcribing, .rewriting:
-            log.info("articulate() ignored — articulate in progress (\(String(describing: self.state)))")
+            log.info("rewrite() ignored — rewrite in progress (\(String(describing: self.state)))")
             return
         case .idle, .error:
             break
@@ -178,7 +211,7 @@ final class ArticulateController: ObservableObject {
         }
     }
 
-    // MARK: - Articulate (Custom) internals
+    // MARK: - Rewrite with Voice internals
 
     private func runCustom() async {
         defer {
@@ -191,14 +224,19 @@ final class ArticulateController: ObservableObject {
         guard permissions.statuses[.accessibilityPostEvents] == .granted else {
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Accessibility not granted (custom)",
                     context: ["flow": "custom"]
                 )
             }
-            state = .error("Grant Accessibility in System Settings for Articulate.")
+            state = .error("Grant Accessibility in System Settings for Rewrite.")
             return
         }
+
+        // Snapshot the run's start timestamp so the persisted row's
+        // `createdAt` reflects when the user invoked Rewrite, not when
+        // the LLM happened to return.
+        let createdAt = Date()
 
         do {
             try Task.checkCancellation()
@@ -210,14 +248,14 @@ final class ArticulateController: ObservableObject {
             // continuation. Without this the user would be stuck
             // listening to silence until they tap again.
             // `stopAndTranscribe` then sees `didDisconnect(token) ==
-            // true` and (because owner is `.articulate`) throws
+            // true` and (because owner is `.rewrite`) throws
             // `disconnectedMidVoiceCommand`. The closure throws into the
             // continuation so the inner `do` flow handles it as cancel.
             let onDisconnect: @MainActor @Sendable () -> Void = { [weak self] in
                 self?.takeSecondToggleContinuation()?.resume()
             }
             let token = try await pipeline.startRecording(
-                owner: .articulate,
+                owner: .rewrite,
                 onDisconnect: onDisconnect
             )
             pipelineToken = token
@@ -237,7 +275,7 @@ final class ArticulateController: ObservableObject {
             guard !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 Task {
                     await self.logSink.warn(
-                        component: "Articulate",
+                        component: "Rewrite",
                         message: "Empty instruction after transcription",
                         context: ["flow": "custom"]
                     )
@@ -247,24 +285,36 @@ final class ArticulateController: ObservableObject {
             }
 
             state = .rewriting
-            let service = articulateService()
-            let rewritten = try await service.articulate(
+            let service = rewriteService()
+            let modelLabel = snapshotModelLabel()
+            let rewritten = try await service.rewrite(
                 selectedText: selectedText,
                 instruction: instruction
             )
 
             guard pipeline.stillActive(token) else { return }
+            // Persist BEFORE paste so a paste failure doesn't lose the
+            // row — Home becomes the recovery affordance for the rare
+            // paste-failure case (plan §6).
+            persistSession(
+                flavor: "voice",
+                selection: selectedText,
+                instruction: instruction,
+                output: rewritten,
+                modelUsed: modelLabel,
+                createdAt: createdAt
+            )
             guard pasteReplacement(rewritten) else { return }
 
             guard pipeline.stillActive(token) else { return }
-            lastArticulation = rewritten
+            lastRewrite = rewritten
             state = .idle
         } catch is CancellationError {
             return
-        } catch let error as ArticulateError {
+        } catch let error as RewriteError {
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Selection capture failed (custom)",
                     context: ["reason": String(error.message.prefix(80))]
                 )
@@ -277,7 +327,7 @@ final class ArticulateController: ObservableObject {
         } catch VoiceInputPipeline.PipelineError.micNotGranted {
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Microphone not granted (custom)",
                     context: ["flow": "custom"]
                 )
@@ -287,7 +337,7 @@ final class ArticulateController: ObservableObject {
             log.error("AudioCapture.start timed out — coreaudiod may be wedged")
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Audio engine setup timed out (>5s) — coreaudiod may be stuck; see Help → Troubleshooting"
                 )
             }
@@ -296,7 +346,7 @@ final class ArticulateController: ObservableObject {
             log.error("AudioCapture.start failed: \(String(describing: error))")
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "AudioCapture.start failed (custom)",
                     context: ["error": ErrorLog.redactedAppleError(error)]
                 )
@@ -307,7 +357,7 @@ final class ArticulateController: ObservableObject {
         } catch VoiceInputPipeline.PipelineError.disconnectedMidVoiceCommand {
             Task {
                 await self.logSink.warn(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Mic disconnected during voice instruction (custom)",
                     context: ["flow": "custom"]
                 )
@@ -316,7 +366,7 @@ final class ArticulateController: ObservableObject {
         } catch VoiceInputPipeline.PipelineError.audioTooShort(let recording) {
             Task {
                 await self.logSink.warn(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Instruction audio too short",
                     context: ["flow": "custom"]
                 )
@@ -325,7 +375,7 @@ final class ArticulateController: ObservableObject {
         } catch VoiceInputPipeline.PipelineError.transcribeBusy {
             Task {
                 await self.logSink.warn(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Transcriber busy",
                     context: ["flow": "custom"]
                 )
@@ -335,22 +385,22 @@ final class ArticulateController: ObservableObject {
             log.error("Transcription failed: \(String(describing: error))")
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Instruction transcription failed",
                     context: ["error": ErrorLog.redactedAppleError(error)]
                 )
             }
             state = .error(transcriptionFailureMessage(for: error))
         } catch {
-            log.error("LLM articulate failed: \(String(describing: error))")
+            log.error("LLM rewrite failed: \(String(describing: error))")
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
-                    message: "LLM articulate failed (custom)",
+                    component: "Rewrite",
+                    message: "LLM rewrite failed (custom)",
                     context: ["error": ErrorLog.redactedAppleError(error)]
                 )
             }
-            state = .error("Articulate failed: \(error.localizedDescription)")
+            state = .error("Rewrite failed: \(error.localizedDescription)")
         }
     }
 
@@ -363,16 +413,21 @@ final class ArticulateController: ObservableObject {
         guard permissions.statuses[.accessibilityPostEvents] == .granted else {
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Accessibility not granted (fixed)",
                     context: ["flow": "fixed"]
                 )
             }
             if stillFixedActive(generation) {
-                state = .error("Grant Accessibility in System Settings for Articulate.")
+                state = .error("Grant Accessibility in System Settings for Rewrite.")
             }
             return
         }
+
+        // Snapshot the run's start timestamp so the persisted row's
+        // `createdAt` reflects when the user invoked Rewrite, not when
+        // the LLM happened to return.
+        let createdAt = Date()
 
         do {
             try Task.checkCancellation()
@@ -384,25 +439,37 @@ final class ArticulateController: ObservableObject {
             guard stillFixedActive(generation) else { return }
             state = .rewriting
 
-            let service = articulateService()
-            let rewritten = try await service.articulate(
+            let service = rewriteService()
+            let modelLabel = snapshotModelLabel()
+            let rewritten = try await service.rewrite(
                 selectedText: selectedText,
                 instruction: Self.fixedInstruction
             )
 
             guard stillFixedActive(generation) else { return }
+            // Persist BEFORE paste so a paste failure doesn't lose the
+            // row — Home becomes the recovery affordance for the rare
+            // paste-failure case (plan §6).
+            persistSession(
+                flavor: "fixed",
+                selection: selectedText,
+                instruction: Self.fixedInstruction,
+                output: rewritten,
+                modelUsed: modelLabel,
+                createdAt: createdAt
+            )
             guard pasteReplacement(rewritten) else { return }
 
             guard stillFixedActive(generation) else { return }
-            lastArticulation = rewritten
+            lastRewrite = rewritten
             state = .idle
         } catch is CancellationError {
             return
-        } catch let error as ArticulateError {
+        } catch let error as RewriteError {
             guard stillFixedActive(generation) else { return }
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Selection capture failed (fixed)",
                     context: ["reason": String(error.message.prefix(80))]
                 )
@@ -410,15 +477,15 @@ final class ArticulateController: ObservableObject {
             state = .error(error.message)
         } catch {
             guard stillFixedActive(generation) else { return }
-            log.error("LLM articulate (fixed) failed: \(String(describing: error))")
+            log.error("LLM rewrite (fixed) failed: \(String(describing: error))")
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
-                    message: "LLM articulate failed (fixed)",
+                    component: "Rewrite",
+                    message: "LLM rewrite failed (fixed)",
                     context: ["error": ErrorLog.redactedAppleError(error)]
                 )
             }
-            state = .error("Articulate failed: \(error.localizedDescription)")
+            state = .error("Rewrite failed: \(error.localizedDescription)")
         }
     }
 
@@ -426,10 +493,10 @@ final class ArticulateController: ObservableObject {
 
     /// Small typed error so both flows can translate capture failures into
     /// user-facing pill messages without leaking sandwich internals.
-    private struct ArticulateError: Error { let message: String }
+    private struct RewriteError: Error { let message: String }
 
     /// Synthetic ⌘C → read selection → restore clipboard. Shared by both
-    /// articulate flows. Throws a human-readable `ArticulateError.message`
+    /// rewrite flows. Throws a human-readable `RewriteError.message`
     /// that callers drop straight into `state = .error(...)`.
     private func captureSelection() async throws -> String {
         let snapshot = pasteboard.snapshot()
@@ -445,19 +512,19 @@ final class ArticulateController: ObservableObject {
         do {
             try pasteboard.postCommandC()
         } catch {
-            throw ArticulateError(message: "Could not copy selection: \(error.localizedDescription)")
+            throw RewriteError(message: "Could not copy selection: \(error.localizedDescription)")
         }
 
         do {
             try await Task.sleep(for: .milliseconds(200))
 
             guard pasteboard.changeCount != changeCountBefore else {
-                throw ArticulateError(message: "No text was copied. Make sure text is selected.")
+                throw RewriteError(message: "No text was copied. Make sure text is selected.")
             }
 
             guard let selectedText = pasteboard.readString(),
                   !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw ArticulateError(message: "No text selected.")
+                throw RewriteError(message: "No text selected.")
             }
 
             pasteboard.restore(snapshot)
@@ -470,6 +537,46 @@ final class ArticulateController: ObservableObject {
         }
     }
 
+    /// Insert a `RewriteSession` row into the SwiftData store for a
+    /// successful Rewrite run. Called on the LLM-success path of both
+    /// `runCustom()` and `runFixed()`, *before* `pasteReplacement(...)` —
+    /// so a paste failure doesn't lose the row (plan §6 resolution).
+    /// Skipped silently when no `ModelContext` was injected (test seam
+    /// path) or when the SwiftData save throws — persistence is a
+    /// best-effort write and never blocks the rewrite UX.
+    private func persistSession(
+        flavor: String,
+        selection: String,
+        instruction: String,
+        output: String,
+        modelUsed: String?,
+        createdAt: Date
+    ) {
+        guard let context = modelContext else { return }
+        let session = RewriteSession(
+            createdAt: createdAt,
+            flavor: flavor,
+            selectionText: selection,
+            instructionText: instruction,
+            output: output,
+            modelUsed: modelUsed,
+            title: RewriteSession.defaultTitle(from: output)
+        )
+        context.insert(session)
+        do {
+            try context.save()
+        } catch {
+            log.error("Failed to save RewriteSession: \(String(describing: error))")
+            Task {
+                await self.logSink.error(
+                    component: "Rewrite",
+                    message: "SwiftData save failed",
+                    context: ["error": ErrorLog.redactedAppleError(error)]
+                )
+            }
+        }
+    }
+
     /// Write `rewritten` to the clipboard, synthesize a ⌘V to paste-replace
     /// the live selection, then restore the clipboard after the target app
     /// has had a chance to consume the paste. Returns false and sets
@@ -479,7 +586,7 @@ final class ArticulateController: ObservableObject {
         let snapshot = pasteboard.snapshot()
         guard pasteboard.write(rewritten) else {
             pasteboard.restore(snapshot)
-            Task { await self.logSink.error(component: "Articulate", message: "Clipboard write failed") }
+            Task { await self.logSink.error(component: "Rewrite", message: "Clipboard write failed") }
             state = .error("Clipboard write failed.")
             return false
         }
@@ -490,12 +597,12 @@ final class ArticulateController: ObservableObject {
             pasteboard.restore(snapshot)
             Task {
                 await self.logSink.error(
-                    component: "Articulate",
+                    component: "Rewrite",
                     message: "Synthetic paste failed",
                     context: ["error": ErrorLog.redactedAppleError(error)]
                 )
             }
-            state = .error("Could not paste articulated text: \(error.localizedDescription)")
+            state = .error("Could not paste rewritten text: \(error.localizedDescription)")
             return false
         }
 

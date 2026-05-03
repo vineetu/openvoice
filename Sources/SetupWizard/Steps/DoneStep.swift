@@ -4,9 +4,9 @@ import SwiftUI
 ///
 /// Acts as a junction: first-run users hit Skip to exit and start using
 /// Jot immediately, power users hit Continue to set up the optional LLM
-/// cleanup + Articulate intro inline. Either path reaches the same
+/// cleanup + Rewrite intro inline. Either path reaches the same
 /// end state — Skip dismisses now, Continue walks through the advanced
-/// pair and then dismisses at ArticulateIntro's Finish. Advanced
+/// pair and then dismisses at RewriteIntro's Finish. Advanced
 /// configuration is always reachable later from Settings or by re-running
 /// this wizard.
 ///
@@ -72,7 +72,7 @@ struct DoneStep: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Advanced, for later")
                     .font(.system(size: 12, weight: .semibold))
-                Text("LLM cleanup, voice-driven rewrite (Articulate), and custom vocabulary are ready whenever you're curious — in Settings, or by re-running this wizard from Settings → General.")
+                Text("LLM cleanup, voice-driven rewrite (Rewrite with Voice), and custom vocabulary are ready whenever you're curious — in Settings, or by re-running this wizard from Settings → General.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

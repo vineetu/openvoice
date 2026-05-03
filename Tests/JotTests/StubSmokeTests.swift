@@ -90,7 +90,7 @@ struct StubSmokeTests {
     @Test func stubURLProtocol_servesCannedResponse() async throws {
         // Phase 3 #32: scoped reset, not `StubURLProtocol.reset()`. The
         // unscoped version wipes the class-level queue including
-        // entries other suites (e.g. `ArticulateFlowTests`) had
+        // entries other suites (e.g. `RewriteFlowTests`) had
         // enqueued for `chat/completions`, leaking a -1008 race when
         // suites run in parallel.
         StubURLProtocol.removeMatching("example.com")

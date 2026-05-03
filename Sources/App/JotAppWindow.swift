@@ -50,11 +50,11 @@ struct JotAppWindow: View {
     @State private var voiceInput: ChatbotVoiceInput
 
     /// Phase 3 #29: per-graph `LLMConfiguration` injected as an
-    /// `@EnvironmentObject` for SwiftUI panes (`ArticulatePane`,
+    /// `@EnvironmentObject` for SwiftUI panes (`RewritePane`,
     /// `AboutPane`) and threaded into `HelpChatStore` via constructor.
     private let llmConfiguration: LLMConfiguration
 
-    /// Phase 4 patch round 5: seams threaded into `ArticulatePane` for
+    /// Phase 4 patch round 5: seams threaded into `RewritePane` for
     /// the Test Connection path and `GeneralPane` for the "Run Setup
     /// Wizard Again" button and destructive Reset alerts. Pre-fix both
     /// panes reached `AppServices.live` lazily on click and could trip on
@@ -207,7 +207,7 @@ struct JotAppWindow: View {
             case .transcription: TranscriptionPane()
             case .vocabulary:    VocabularyPane()
             case .sound:         SoundPane()
-            case .ai:            ArticulatePane(
+            case .ai:            RewritePane(
                                     urlSession: urlSession,
                                     appleIntelligence: appleIntelligence
                                 )

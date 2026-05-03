@@ -124,12 +124,12 @@ public struct DictationResult: Sendable {
     }
 }
 
-// MARK: - Articulate result
+// MARK: - Rewrite result
 
-/// Result of `harness.articulate(...)` (both fixed and custom-instruction
-/// variants). The pasted text is the user-visible output of the articulate
+/// Result of `harness.rewrite(...)` (both fixed and custom-instruction
+/// variants). The pasted text is the user-visible output of the rewrite
 /// pipeline — delivered via the synthetic ⌘V → restore sandwich.
-public struct ArticulateResult: Sendable {
+public struct RewriteResult: Sendable {
     /// The text that landed in the editor via synthetic paste. nil on
     /// failure paths where the LLM never returned (`pillError` non-nil).
     public let pastedText: String?
@@ -160,12 +160,12 @@ public struct AskJotResult: Sendable {
     /// The raw voice-input transcript before condensation. nil when the
     /// run was cancelled before transcription completed.
     public let transcript: String?
-    /// The condensed question after Apple Intelligence `articulate(...)`.
+    /// The condensed question after Apple Intelligence `rewrite(...)`.
     /// nil when condensation was disabled, never started, or was cancelled
     /// (see `condensationTaskWasCancelled`).
     public let condensed: String?
     /// **I1 regression flag.** True iff the in-flight Apple Intelligence
-    /// `articulate` (condensation) call observed cancellation before
+    /// `rewrite` (condensation) call observed cancellation before
     /// completing. The I1 cancel-doesn't-cancel test asserts this is
     /// `true` when the harness cancels with `cancelAfter: .condensing`.
     /// Production wiring must propagate `Task.cancel()` through the

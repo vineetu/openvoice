@@ -171,7 +171,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             await MainActor.run { SoundPlayer.shared.prewarm() }
         }
         services.soundTriggers.start(recorder: services.recorder)
-        services.soundTriggers.start(articulate: services.articulateController)
+        services.soundTriggers.start(rewrite: services.rewriteController)
 
         // Retention cleanup: purge on launch, hourly thereafter. Respects
         // `jot.retentionDays` (0 = keep forever).

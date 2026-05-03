@@ -100,7 +100,7 @@ extension JotHarness {
         // condenser returns. With `StubAppleIntelligence(.stub)`,
         // condensation completes synchronously and we'd race past
         // `.condensing` — the I1 test seeds `.blocksUntilCancelled`
-        // so the stub's `articulate(...)` suspends, holding the flow
+        // so the stub's `rewrite(...)` suspends, holding the flow
         // in `.condensing` long enough to cancel.
         if cancelAfter == .condensing {
             try await Self.awaitMicState(voice, predicate: { state in
@@ -122,7 +122,7 @@ extension JotHarness {
             //
             // With the bug fixed (Phase 2), cancellation propagates
             // immediately → flag flips `true` within ms.
-            try await Self.awaitArticulateCancellation(
+            try await Self.awaitRewriteCancellation(
                 stubAppleIntelligence,
                 timeout: .milliseconds(500)
             )
@@ -173,8 +173,8 @@ extension JotHarness {
         // `condensationTaskWasCancelled` is the I1 invariant:
         //   - With `StubAppleIntelligence(.blocksUntilCancelled)`,
         //     the stub's `withTaskCancellationHandler` flips
-        //     `lastArticulateWasCancelled = true` when cancellation
-        //     reaches the suspended `articulate(...)` call.
+        //     `lastRewriteWasCancelled = true` when cancellation
+        //     reaches the suspended `rewrite(...)` call.
         //   - With `condenserOverride: StubCondenser(...)`,
         //     `outcome == .cancelled` when the stub's
         //     `Task.checkCancellation()` throws because cancellation
@@ -182,7 +182,7 @@ extension JotHarness {
         // Either path proves the production cancel propagation;
         // OR them so the harness's I1 result reflects whichever
         // path the test wired up.
-        let viaAppleIntelligence = await stubAppleIntelligence.lastArticulateWasCancelled
+        let viaAppleIntelligence = await stubAppleIntelligence.lastRewriteWasCancelled
         let viaCondenser = (stubCondenser?.outcome == .cancelled)
         let cancelled = viaAppleIntelligence || viaCondenser
 
@@ -225,17 +225,17 @@ extension JotHarness {
         }
     }
 
-    /// Poll `stubAppleIntelligence.lastArticulateWasCancelled` until
+    /// Poll `stubAppleIntelligence.lastRewriteWasCancelled` until
     /// it flips `true` or `timeout` elapses. Used by the I1 test —
     /// returns successfully whether or not the flag flipped (the test
     /// asserts on the resulting value).
-    static func awaitArticulateCancellation(
+    static func awaitRewriteCancellation(
         _ stub: StubAppleIntelligence,
         timeout: Duration
     ) async throws {
         let deadline = ContinuousClock.now.advanced(by: timeout)
         while ContinuousClock.now < deadline {
-            if await stub.lastArticulateWasCancelled { return }
+            if await stub.lastRewriteWasCancelled { return }
             try await Task.sleep(for: .milliseconds(50))
         }
         // Don't throw — the I1 test wants to assert on the final

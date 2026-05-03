@@ -74,11 +74,38 @@ final class LogScanner: ObservableObject {
             predicate: #Predicate { $0.createdAt >= cutoff }
         )
         descriptor.fetchLimit = 2000
-        guard let recordings = try? ctx.fetch(descriptor) else { return [] }
         var all: [String] = []
-        for r in recordings {
-            if r.transcript.count >= 10 { all.append(r.transcript) }
-            if r.rawTranscript.count >= 10 && r.rawTranscript != r.transcript { all.append(r.rawTranscript) }
+        var seen = Set<String>()
+        let appendIfSensitive: (String) -> Void = { s in
+            guard s.count >= 10 else { return }
+            guard seen.insert(s).inserted else { return }
+            all.append(s)
+        }
+        if let recordings = try? ctx.fetch(descriptor) {
+            for r in recordings {
+                appendIfSensitive(r.transcript)
+                if r.rawTranscript != r.transcript { appendIfSensitive(r.rawTranscript) }
+            }
+        }
+        // Rewrite sessions carry user-selected text + voice instructions +
+        // LLM output that must participate in log redaction with the same
+        // count >= 10 threshold as the dictation transcript fields. Without
+        // this, a Rewrite selection ("my client said X about Y") that
+        // incidentally appears in any log line would not be redacted — a
+        // privacy regression vs. dictation. Identical strings across
+        // selectionText / instructionText / output (or across sessions)
+        // are deduped via `seen` so `LogRedactor` doesn't apply the same
+        // range twice against a mutating string.
+        var sessionDescriptor = FetchDescriptor<RewriteSession>(
+            predicate: #Predicate { $0.createdAt >= cutoff }
+        )
+        sessionDescriptor.fetchLimit = 2000
+        if let sessions = try? ctx.fetch(sessionDescriptor) {
+            for s in sessions {
+                appendIfSensitive(s.selectionText)
+                appendIfSensitive(s.instructionText)
+                appendIfSensitive(s.output)
+            }
         }
         return all
     }

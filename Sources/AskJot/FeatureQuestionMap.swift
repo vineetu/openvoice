@@ -1,7 +1,7 @@
 import Foundation
 
 /// Single source of truth for the sparkle-icon prefills on the three
-/// Basics hero cards (Dictation, Cleanup, Articulate). Tapping the
+/// Basics hero cards (Dictation, Cleanup, Rewrite). Tapping the
 /// sparkle on a hero routes to the Ask Jot sidebar entry and prefills
 /// the TextField with `FeatureQuestionMap.prefill(for: heroSlug)` —
 /// does NOT auto-send (spec §9 rule 5).
@@ -9,12 +9,14 @@ import Foundation
 /// Keys are the hero slugs from `Feature.swift` (`"dictation"`,
 /// `"cleanup"`, `"articulate"`). Any other slug returns `nil`; the
 /// sparkle affordance only exists on the three heroes so callers
-/// shouldn't pass sub-row slugs here.
+/// shouldn't pass sub-row slugs here. The `"articulate"` slug is kept
+/// verbatim as an internal identifier (see preservation list); only
+/// the user-visible question text refers to "Rewrite".
 enum FeatureQuestionMap {
     private static let prefills: [String: String] = [
         "dictation":  "How does Jot's dictation work end-to-end?",
         "cleanup":    "What does Cleanup do, and which provider should I pick?",
-        "articulate": "What's the difference between Articulate Custom and Fixed?"
+        "articulate": "What's the difference between Rewrite and Rewrite with Voice?"
     ]
 
     static func prefill(for heroSlug: String) -> String? {

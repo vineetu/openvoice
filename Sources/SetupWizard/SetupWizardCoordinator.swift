@@ -27,7 +27,7 @@ final class SetupWizardCoordinator: ObservableObject {
     @Published var chrome: WizardStepChrome = .empty
 
     /// Transcript from a successful Test step, persisted here so the Cleanup
-    /// and Articulate intro steps can run a live demo against the user's real
+    /// and Rewrite intro steps can run a live demo against the user's real
     /// dictation. Nil when Test hasn't succeeded (skipped, failed, or user
     /// navigated past it without recording).
     @Published var testTranscript: String?
@@ -45,7 +45,7 @@ final class SetupWizardCoordinator: ObservableObject {
     /// `AudioCapture()` directly, bypassing the seam.
     let audioCapture: any AudioCapturing
 
-    /// LLM dependencies used by `CleanupStep` and `ArticulateIntroStep`
+    /// LLM dependencies used by `CleanupStep` and `RewriteIntroStep`
     /// preview demos. Coordinator-injected (rather than reached lazily
     /// via `AppServices.live` from inside the step views) so the demo
     /// surface can never crash on a nil-services race — the previous
@@ -111,7 +111,7 @@ final class SetupWizardCoordinator: ObservableObject {
             // Primary disabled while a recording is in flight — that's
             // chrome-level state, not a precondition.
             return true
-        case .done, .cleanup, .articulateIntro:
+        case .done, .cleanup, .rewriteIntro:
             // Post-basics walkthrough steps. No persistent precondition.
             return true
         }

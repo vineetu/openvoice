@@ -28,7 +28,7 @@ enum WizardPresenter {
     /// production capture instance (or harness stub) — `TestStep`'s
     /// 3-second smoke test records through it. The LLM seams
     /// (`urlSession`, `appleIntelligence`, `llmConfiguration`) are
-    /// constructor-injected here so the Cleanup and Articulate intro
+    /// constructor-injected here so the Cleanup and Rewrite intro
     /// preview steps can route through `AIServices.current(...)` without
     /// a lazy `AppServices.live` reach (which previously trapped on
     /// `preconditionFailure` if the live graph wasn't visible from the

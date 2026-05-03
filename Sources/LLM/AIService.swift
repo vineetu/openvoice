@@ -9,9 +9,9 @@ import Foundation
 ///
 ///   * `transform(...)` — Cleanup tail. Used by `RecorderController` to
 ///     post-process raw dictation transcripts.
-///   * `articulate(...)` — Selection rewrite. Used by
-///     `ArticulateController` for both Custom (voice instruction) and
-///     Fixed (`"Articulate this"`) flows.
+///   * `rewrite(...)` — Selection rewrite. Used by
+///     `RewriteController` for both Rewrite with Voice (voice instruction)
+///     and Rewrite (`"Rewrite this"`) flows.
 ///   * `streamChat(...)` — Ask Jot conversational streaming. Used by
 ///     `HelpChatStore.send`. Returns an `AsyncThrowingStream<String, Error>`
 ///     of token deltas; provider-specific errors (e.g.
@@ -31,11 +31,11 @@ protocol AIService: Sendable {
     /// prompt composition happen *inside* the conformer.
     func transform(transcript: String) async throws -> String
 
-    /// Articulate a selection according to the user's instruction.
-    /// Mirrors `LLMClient.articulate(selectedText:instruction:)` —
+    /// Rewrite a selection according to the user's instruction.
+    /// Mirrors `LLMClient.rewrite(selectedText:instruction:)` —
     /// shared invariants + classifier branch composition happen inside
     /// the conformer.
-    func articulate(selectedText: String, instruction: String) async throws -> String
+    func rewrite(selectedText: String, instruction: String) async throws -> String
 
     /// Stream an Ask Jot turn. Returns a delta-token stream; consumers
     /// accumulate into the assistant bubble. Provider-specific errors
@@ -85,9 +85,9 @@ struct AIChatRequest: Sendable {
     /// Per-turn provider snapshot. Captured at Send time so the
     /// in-flight stream is immune to mid-stream Settings changes.
     /// `nil` means "read live config off `LLMConfiguration`" — the
-    /// transform / articulate paths (which run as one-shot async
+    /// transform / rewrite paths (which run as one-shot async
     /// calls, not streams) tolerate the simpler live read because
-    /// they capture config inside `LLMClient.transform/articulate`'s
+    /// they capture config inside `LLMClient.transform/rewrite`'s
     /// `MainActor.run` block before any await crosses the
     /// Settings-toggle window.
     let providerOverride: ProviderSnapshot?
@@ -245,7 +245,7 @@ enum AIServices {
 
 // MARK: - Apple Intelligence conformer
 
-/// Routes `transform` / `articulate` through the same `LLMClient` the
+/// Routes `transform` / `rewrite` through the same `LLMClient` the
 /// cloud path uses (LLMClient already short-circuits Apple Intelligence
 /// internally) — call-site convergence without duplicating prompt
 /// composition. `streamChat` reaches the Apple Intelligence client
@@ -266,14 +266,14 @@ struct AppleAIService: AIService {
         return try await client.transform(transcript: transcript)
     }
 
-    func articulate(selectedText: String, instruction: String) async throws -> String {
+    func rewrite(selectedText: String, instruction: String) async throws -> String {
         let client = LLMClient(
             session: urlSession,
             appleClient: appleClient,
             logSink: logSink,
             llmConfiguration: llmConfiguration
         )
-        return try await client.articulate(selectedText: selectedText, instruction: instruction)
+        return try await client.rewrite(selectedText: selectedText, instruction: instruction)
     }
 
     func streamChat(request: AIChatRequest) -> AsyncThrowingStream<String, Error> {
@@ -283,7 +283,7 @@ struct AppleAIService: AIService {
 
 // MARK: - Cloud conformer
 
-/// Routes `transform` / `articulate` through `LLMClient` (the same
+/// Routes `transform` / `rewrite` through `LLMClient` (the same
 /// per-provider HTTP code path that already shipped); routes
 /// `streamChat` through the per-provider `CloudChatStream` (preserving
 /// inline tool-calling for OpenAI / Anthropic / Gemini / Ollama /
@@ -304,14 +304,14 @@ struct CloudAIService: AIService {
         return try await client.transform(transcript: transcript)
     }
 
-    func articulate(selectedText: String, instruction: String) async throws -> String {
+    func rewrite(selectedText: String, instruction: String) async throws -> String {
         let client = LLMClient(
             session: urlSession,
             appleClient: appleClient,
             logSink: logSink,
             llmConfiguration: llmConfiguration
         )
-        return try await client.articulate(selectedText: selectedText, instruction: instruction)
+        return try await client.rewrite(selectedText: selectedText, instruction: instruction)
     }
 
     func streamChat(request: AIChatRequest) -> AsyncThrowingStream<String, Error> {
@@ -416,10 +416,10 @@ struct CloudAIService: AIService {
 
 // MARK: - Test-injectable adapter
 
-/// Thin `AIService` that forwards `transform` / `articulate` to a
+/// Thin `AIService` that forwards `transform` / `rewrite` to a
 /// pre-built `LLMClient`. Production code goes through the dispatcher;
 /// this adapter only exists so existing test seams that inject a
-/// custom `LLMClient` (e.g. `ArticulateController(llm:)`, regression
+/// custom `LLMClient` (e.g. `RewriteController(llm:)`, regression
 /// suite in `Phase4PatchRegressionTests`) keep working without
 /// re-plumbing through `LLMConfiguration`. `streamChat` is
 /// unimplemented because the affected test seams never call it.
@@ -430,13 +430,13 @@ struct DirectLLMClientAIService: AIService {
         try await client.transform(transcript: transcript)
     }
 
-    func articulate(selectedText: String, instruction: String) async throws -> String {
-        try await client.articulate(selectedText: selectedText, instruction: instruction)
+    func rewrite(selectedText: String, instruction: String) async throws -> String {
+        try await client.rewrite(selectedText: selectedText, instruction: instruction)
     }
 
     func streamChat(request: AIChatRequest) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
-            // The injected-client seam (ArticulateController test
+            // The injected-client seam (RewriteController test
             // surface) doesn't reach `streamChat`. If a future caller
             // does, surface a typed error rather than trapping.
             continuation.finish(throwing: LLMError.appleIntelligenceUnavailable)

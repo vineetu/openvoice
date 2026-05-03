@@ -102,7 +102,7 @@ public enum HelpTab: String, CaseIterable, Hashable, Sendable {
 /// What kind of surface renders the feature. Used by the navigator to
 /// pick between "scroll only" and "expand then scroll" flows.
 public enum Surface: String, Hashable, Sendable {
-    /// A hero card (Dictation / Cleanup / Articulate) on the Basics tab.
+    /// A hero card (Dictation / Cleanup / Rewrite) on the Basics tab.
     case hero
     /// A sub-row beneath a hero on the Basics tab. Plain sub-rows
     /// (isDeepLinkable == false) still get this surface kind.
@@ -180,22 +180,23 @@ extension Feature {
         features.append(cleanupSubRow(id: "cleanup-fallback", title: "Graceful fallback on failure", plain: true))
         features.append(cleanupSubRow(id: "cleanup-raw-preserved", title: "Raw + cleaned both saved", plain: true))
 
-        // Hero: Articulate
+        // Hero: Rewrite (legacy slug `articulate` preserved as opaque ID by
+        // the rename migration — slug is internal-only, not user-visible)
         features.append(Feature(
             id: "articulate",
-            title: "Articulate",
+            title: "Rewrite",
             tab: .basics,
             surface: .hero,
             expandableRowId: "articulate"
         ))
 
-        // Articulate sub-rows (3, all expandable). `articulate-shared-prompt`
+        // Rewrite sub-rows (3, all expandable). `articulate-shared-prompt`
         // was removed — the shared invariants block is an implementation
         // detail visible when the user opens the prompt editor, not a
         // user-facing surface that warrants its own Help row.
-        features.append(articulateSubRow(id: "articulate-custom", title: "Articulate (Custom)"))
-        features.append(articulateSubRow(id: "articulate-fixed", title: "Articulate (Fixed)"))
-        features.append(articulateSubRow(id: "articulate-intent-classifier", title: "Intent classifier"))
+        features.append(rewriteSubRow(id: "articulate-custom", title: "Rewrite with Voice"))
+        features.append(rewriteSubRow(id: "articulate-fixed", title: "Rewrite"))
+        features.append(rewriteSubRow(id: "articulate-intent-classifier", title: "Intent classifier"))
 
         // ---------------- Advanced ----------------
 
@@ -250,7 +251,7 @@ extension Feature {
         // New AI cards (3)
         features.append(troubleshootingCard(id: "ai-unavailable", title: "AI unavailable"))
         features.append(troubleshootingCard(id: "ai-connection-failed", title: "AI connection failed"))
-        features.append(troubleshootingCard(id: "articulate-bad-results", title: "Articulate giving bad results?"))
+        features.append(troubleshootingCard(id: "articulate-bad-results", title: "Rewrite giving bad results?"))
 
         return features
     }
@@ -281,7 +282,7 @@ extension Feature {
         )
     }
 
-    private static func articulateSubRow(id: String, title: String, plain: Bool = false) -> Feature {
+    private static func rewriteSubRow(id: String, title: String, plain: Bool = false) -> Feature {
         Feature(
             id: id,
             title: title,
@@ -379,7 +380,7 @@ extension Feature {
         // Cleanup sub-rows
         "cleanup-providers", "cleanup-prompt", "cleanup-fallback",
         "cleanup-raw-preserved",
-        // Articulate sub-rows (3 — removed: articulate-shared-prompt)
+        // Rewrite sub-rows (3 — removed: articulate-shared-prompt)
         "articulate-custom", "articulate-fixed", "articulate-intent-classifier",
         // Advanced cards
         "ai-apple-intelligence", "ai-cloud-providers", "ai-ollama",

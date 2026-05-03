@@ -9,7 +9,7 @@ import SwiftUI
 /// Three kinds, one per hero (redesign §4):
 ///   - `.dictation`: mic → 7-bar waveform → text bubble
 ///   - `.cleanup`:   messy strikethrough bubble → clean bubble slide-in
-///   - `.articulate`: before text + selection → instruction bubble → after
+///   - `.rewrite`: before text + selection → instruction bubble → after
 ///
 /// All three keyframe tables use the same easing and clamp to keep opacity
 /// above 0.2 so labels stay legible. A "illustrative" caption sits
@@ -31,7 +31,7 @@ struct HeroIllustration: View {
                 switch kind {
                 case .dictation:   DictationArt(phase: phase)
                 case .cleanup:     CleanupArt(phase: phase)
-                case .articulate:  ArticulateArt(phase: phase)
+                case .rewrite:     RewriteArt(phase: phase)
                 }
             }
             .padding(.horizontal, 20)
@@ -59,7 +59,7 @@ struct HeroIllustration: View {
         switch kind {
         case .dictation:  return "Illustration: microphone to waveform to transcribed text."
         case .cleanup:    return "Illustration: messy transcript cleaned up into polished text."
-        case .articulate: return "Illustration: selected text rewritten with a voice instruction."
+        case .rewrite:    return "Illustration: selected text rewritten with a voice instruction."
         }
     }
 }
@@ -262,13 +262,13 @@ private struct CleanBubble: View {
     }
 }
 
-// MARK: - Articulate art
+// MARK: - Rewrite art
 
 /// Phase 0.0–0.3: "before" text visible, selected fragment highlighted.
 /// Phase 0.3–0.5: instruction bubble slides in from top ("make it formal").
 /// Phase 0.5–0.8: "after" text fades in (rewritten selection).
 /// Phase 0.8–1.0: hold.
-private struct ArticulateArt: View {
+private struct RewriteArt: View {
     let phase: Double
 
     var body: some View {

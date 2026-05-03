@@ -15,8 +15,8 @@ import KeyboardShortcuts
 struct UserConfigSnapshot: Equatable {
     let toggleRecordingShortcut: String?
     let pushToTalkShortcut: String?
-    let articulateCustomShortcut: String?
-    let articulateFixedShortcut: String?
+    let rewriteWithVoiceShortcut: String?
+    let rewriteShortcut: String?
     let pasteLastShortcut: String?
     let cleanupEnabled: Bool
     let aiProviderDisplay: String?
@@ -45,8 +45,8 @@ struct UserConfigSnapshot: Equatable {
         UserConfigSnapshot(
             toggleRecordingShortcut: KeyboardShortcuts.getShortcut(for: .toggleRecording)?.description,
             pushToTalkShortcut: KeyboardShortcuts.getShortcut(for: .pushToTalk)?.description,
-            articulateCustomShortcut: KeyboardShortcuts.getShortcut(for: .articulateCustom)?.description,
-            articulateFixedShortcut: KeyboardShortcuts.getShortcut(for: .articulate)?.description,
+            rewriteWithVoiceShortcut: KeyboardShortcuts.getShortcut(for: .rewriteWithVoice)?.description,
+            rewriteShortcut: KeyboardShortcuts.getShortcut(for: .rewrite)?.description,
             pasteLastShortcut: KeyboardShortcuts.getShortcut(for: .pasteLastTranscription)?.description,
             cleanupEnabled: cleanupEnabled,
             aiProviderDisplay: aiProviderDisplay,
@@ -63,6 +63,6 @@ struct UserConfigSnapshot: Equatable {
     var formatted: String {
         let retention: String = retentionDays == 0 ? "forever" : "\(retentionDays) days"
         let provider = aiProviderDisplay ?? "not configured"
-        return "toggle=\(toggleRecordingShortcut ?? "unbound"), push-to-talk=\(pushToTalkShortcut ?? "unbound"), articulate-custom=\(articulateCustomShortcut ?? "unbound"), articulate-fixed=\(articulateFixedShortcut ?? "unbound"), paste-last=\(pasteLastShortcut ?? "unbound"), cleanup=\(cleanupEnabled ? "on" : "off"), ai-provider=\(provider), model=\(modelDownloaded ? "ready" : "not downloaded"), retention=\(retention), launch-at-login=\(launchAtLogin ? "yes" : "no"), vocabulary=\(vocabularyEntryCount) entries"
+        return "toggle=\(toggleRecordingShortcut ?? "unbound"), push-to-talk=\(pushToTalkShortcut ?? "unbound"), rewrite-with-voice=\(rewriteWithVoiceShortcut ?? "unbound"), rewrite=\(rewriteShortcut ?? "unbound"), paste-last=\(pasteLastShortcut ?? "unbound"), cleanup=\(cleanupEnabled ? "on" : "off"), ai-provider=\(provider), model=\(modelDownloaded ? "ready" : "not downloaded"), retention=\(retention), launch-at-login=\(launchAtLogin ? "yes" : "no"), vocabulary=\(vocabularyEntryCount) entries"
     }
 }

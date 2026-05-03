@@ -26,11 +26,11 @@ Single Xcode project, one executable target. Each layer is a Swift function boun
 | **Recording** | `AVAudioEngine` tap → converter → buffer + WAV on disk; hotkey routing with dynamic Escape; CoreAudio device pinning |
 | **Transcription** | FluidAudio wrapper (single in-flight), post-processing, model download/load |
 | **Delivery** | Clipboard sandwich: save → write → synthetic `⌘V` → restore; optional auto-Enter |
-| **Library** | SwiftData recordings model + recordings UI state powering the Home list, detail view, playback, and per-row actions |
+| **Library** | SwiftData models — `Recording` (dictation) + `RewriteSession` (rewrite runs) — and the merged `LibraryItem`-driven Home list, detail views, playback (recordings only), and per-row actions |
 | **Settings** | Sidebar section (not a separate scene): General / Transcription / Vocabulary / Sound / AI / Shortcuts. Per-field `info.circle` popovers with "Learn more →" deep-links into Help. Editable LLM prompts under `CustomizePromptDisclosure` |
 | **Help** | In-app prose walkthrough: Basics / Advanced / Troubleshooting. Accepts deep-links from Settings popovers, Ask Jot feature links, and Help hero sparkle affordances |
-| **LLM** | Provider-neutral client for transcript cleanup (Transform) + Articulate; Apple Intelligence (on-device, default for new installs on macOS 26+), OpenAI, Anthropic, Gemini, Ollama. Apple Intelligence bypasses the HTTP client entirely and calls the on-device `FoundationModels` framework via `AppleIntelligenceClient`. Articulate uses a regex instruction classifier (`ArticulateInstructionClassifier`) to route to one of four branch prompts — voice-preserving / structural / translation / code — composed on top of a small shared-invariants block |
-| **Articulate** | Two hotkeys, one pipeline. `.articulateCustom` (v1.4 "Rewrite Selection", raw binding key preserved): selection → synthetic ⌘C → record voice instruction → classify → branch-specific LLM prompt → paste back. `.articulate` (v1.5): selection → synthetic ⌘C → fixed `"Articulate this"` instruction → LLM → paste back. No voice capture on the fixed-prompt path |
+| **LLM** | Provider-neutral client for transcript cleanup (Transform) + Rewrite; Apple Intelligence (on-device, default for new installs on macOS 26+), OpenAI, Anthropic, Gemini, Ollama. Apple Intelligence bypasses the HTTP client entirely and calls the on-device `FoundationModels` framework via `AppleIntelligenceClient`. Rewrite uses a regex instruction classifier (`RewriteInstructionClassifier`) to route to one of four branch prompts — voice-preserving / structural / translation / code — composed on top of a small shared-invariants block |
+| **Rewrite** | Two hotkeys, one pipeline. `.rewriteWithVoice` (v1.4; raw KeyboardShortcuts storage key `rewriteSelection` preserved across the v1.4→v1.6 Swift symbol rename): selection → synthetic ⌘C → record voice instruction → classify → branch-specific LLM prompt → paste back. `.rewrite` (v1.5; raw storage key `articulate` preserved): selection → synthetic ⌘C → fixed `"Rewrite this"` instruction → LLM → paste back. No voice capture on the fixed-prompt path |
 | **SetupWizard** | First-run window: Welcome → Permissions → Model → Microphone → Shortcuts → Test |
 | **Sounds** | Bundled chimes wrapped in a thin `AVAudioPlayer` helper |
 
@@ -53,7 +53,7 @@ Sources/
   Recording/      ← AVAudioEngine capture, converter, hotkey routing
   Transcription/  ← FluidAudio wrapper, post-processing, model I/O
   LLM/            ← Provider-neutral HTTP client + AppleIntelligenceClient + prompts + classifier
-  Articulate/     ← Selection-capture + paste-back controller (fixed and custom-instruction variants)
+  Rewrite/        ← Selection-capture + paste-back controller (fixed and voice-instruction variants)
   Permissions/    ← Mic / input-monitoring / accessibility capability modelling
   Delivery/       ← Clipboard sandwich, synthetic paste, auto-Enter
   Library/        ← SwiftData models + recordings UI/state used by Home
@@ -85,14 +85,14 @@ Keep each folder to its single layer. Cross-layer shared types (e.g. `Recording`
 ## Key constraints
 
 - **Transcription stays on-device.** Audio and transcripts never leave the Mac via the transcription path. The only automatic network calls are: the initial Parakeet model download, and the daily Sparkle update check.
-- **LLM paths are provider-neutral; Apple Intelligence is the default on macOS 26+.** Transform (cleanup) and Articulate route through whatever provider the user has selected. For fresh installs on macOS 26+, Apple Intelligence (on-device via the `FoundationModels` framework) is the default — no API key, no network, nothing leaves the Mac. Existing v1.4 users keep their configured provider unchanged (`@AppStorage` honors the stored value). Ollama remains available for users who want local-but-not-Apple. Cloud providers (OpenAI, Anthropic, Gemini) are opt-in.
+- **LLM paths are provider-neutral; Apple Intelligence is the default on macOS 26+.** Transform (cleanup) and Rewrite route through whatever provider the user has selected. For fresh installs on macOS 26+, Apple Intelligence (on-device via the `FoundationModels` framework) is the default — no API key, no network, nothing leaves the Mac. Existing v1.4 users keep their configured provider unchanged (`@AppStorage` honors the stored value). Ollama remains available for users who want local-but-not-Apple. Cloud providers (OpenAI, Anthropic, Gemini) are opt-in.
 - **Ask Jot has its own provider policy.** Ask Jot defaults to Apple Intelligence at the instrumentation level. If the selected AI provider is non-Apple, Ask Jot only routes to that provider when the user explicitly enables "Allow Ask Jot to use this provider" in Settings → AI; otherwise Ask Jot remains on Apple Intelligence.
 - **Ask Jot grounding is budget-enforced at build time.** `Resources/help-content.md` is generated from `Resources/help-content-base.md` plus fragments by build-phase scripts in `tools/`, is gitignored, and must stay within a 1500-token budget. The current shipped grounding doc is 1015 tokens.
 - **Ask Jot post-processing is provider-agnostic.** Slug correction / injection / sharp-fix forcing / command scrubbing run on both Apple and cloud Ask Jot responses. Inline tool-calling is cloud-only. The current shipped pass lifted citation coverage from roughly 28% to roughly 61%, with sharp-fix leak coverage at 100%.
 - **No telemetry.** No analytics, crash reporting, or error pings. A privacy-conscious user with Little Snitch must see only: model download (first-run), appcast fetch (daily), and whatever LLM endpoint they explicitly configured.
 - **No accounts.** The app must be fully usable without signing in anywhere.
 - **Apple Silicon, macOS 14+.** Don't add compatibility shims for Intel or older macOS.
-- **Global shortcuts must not steal keys they don't own.** The cancel key (`Esc`) is only active while recording, transforming, capturing a voice instruction for Articulate (Custom), or articulating.
+- **Global shortcuts must not steal keys they don't own.** The cancel key (`Esc`) is only active while recording, transforming, capturing a voice instruction for Rewrite with Voice, or rewriting.
 - **Native Mac feel.** SwiftUI + AppKit where appropriate, SF Symbols, system semantic colors, `NSVisualEffectView` vibrancy, HIG-aligned motion. No web-in-a-wrapper patterns.
 - **Out of scope:** cloud transcription, VAD / continuous listening, file upload, non-macOS ports, multi-user sync.
 
@@ -169,7 +169,7 @@ Keep cross-cutting concerns (cancellability, pipeline states, hotkey routing) in
 
 - `docs/design-requirements.md` — stack-agnostic product requirements (source of truth for **what**)
 - `docs/features.md` — shipping feature inventory
-- `docs/plans/transform.md` — optional LLM cleanup + Articulate design
+- `docs/plans/transform.md` — optional LLM cleanup + Rewrite design
 - `docs/research/apple-intelligence-as-provider.md` — Apple Intelligence default-provider decision, long-form limitations, 6-provider strategy
 - `docs/research/future-model-switching.md` — latent issue flagged for when a 2nd Parakeet variant ships
 - `docs/plans/apple-signing.md` — Developer ID signing + notarization notes

@@ -25,8 +25,8 @@ enum ResetActions {
         KeyboardShortcuts.reset(
             .toggleRecording,
             .pasteLastTranscription,
-            .articulate,
-            .articulateCustom,
+            .rewrite,
+            .rewriteWithVoice,
             .pushToTalk
         )
 

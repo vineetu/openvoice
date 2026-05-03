@@ -76,6 +76,21 @@ enum RecordingStore {
         }
     }
 
+    /// Group a heterogeneous list of `LibraryItem`s (dictation `Recording`
+    /// rows interleaved with `RewriteSession` rows) into `[group: [item]]`,
+    /// preserving sort order within each bucket. Callers are expected to hand
+    /// in a list already sorted by `createdAt` descending.
+    static func grouped(libraryItems: [LibraryItem], now: Date = .now) -> [(RecordingDateGroup, [LibraryItem])] {
+        var buckets: [RecordingDateGroup: [LibraryItem]] = [:]
+        for item in libraryItems {
+            buckets[group(for: item.createdAt, now: now), default: []].append(item)
+        }
+        return RecordingDateGroup.allCases.compactMap { g in
+            guard let items = buckets[g], !items.isEmpty else { return nil }
+            return (g, items)
+        }
+    }
+
     /// Delete a recording from the context *and* its backing WAV. We remove
     /// the file first so a failed deletion can't leave a dangling row; if the
     /// file is already gone (user deleted it in Finder, retention cleaned up
@@ -86,11 +101,26 @@ enum RecordingStore {
         context.delete(recording)
     }
 
+    /// Delete a `RewriteSession` row. No filesystem cleanup needed —
+    /// rewrite sessions don't persist any audio (the voice-instruction
+    /// WAV is intentionally dropped at capture time).
+    static func delete(_ session: RewriteSession, from context: ModelContext) {
+        context.delete(session)
+    }
+
     /// Rename is in-place — SwiftData tracks the change automatically. Kept
     /// as a function so the call site reads at intent-level.
     static func rename(_ recording: Recording, to newTitle: String) {
         let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         recording.title = trimmed.isEmpty ? "Untitled recording" : trimmed
+    }
+
+    /// Rename a `RewriteSession` in place, mirroring the `Recording`
+    /// variant. Empty / whitespace-only input falls back to a placeholder
+    /// title.
+    static func rename(_ session: RewriteSession, to newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        session.title = trimmed.isEmpty ? "Untitled rewrite" : trimmed
     }
 }
 

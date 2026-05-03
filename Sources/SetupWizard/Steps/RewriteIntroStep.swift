@@ -1,19 +1,19 @@
 import KeyboardShortcuts
 import SwiftUI
 
-/// Step 8 — final wizard step. Teaches Articulate via a live demo against
+/// Step 8 — final wizard step. Teaches Rewrite via a live demo against
 /// the user's Test-step transcript (when available), plus shows the two
 /// hotkey bindings so the user walks away knowing which key does what.
 ///
-/// Demo calls the SAME pipeline Articulate (fixed-prompt) uses in the
-/// wild: `LLMClient.articulate(selectedText:instruction:)` with the
-/// instruction "Articulate this" — identical to how the feature works
-/// post-wizard. No mocking, no special-casing.
-struct ArticulateIntroStep: View {
+/// Demo calls the SAME pipeline Rewrite (fixed-prompt) uses in the wild:
+/// `LLMClient.rewrite(selectedText:instruction:)` with the instruction
+/// "Rewrite this" — identical to how the feature works post-wizard. No
+/// mocking, no special-casing.
+struct RewriteIntroStep: View {
     @EnvironmentObject private var coordinator: SetupWizardCoordinator
 
     @State private var phase: PreviewPhase = .idle
-    @State private var articulatedText: String = ""
+    @State private var rewrittenText: String = ""
     @State private var errorMessage: String?
 
     /// LLM dispatch resolved from coordinator-injected deps (set up by
@@ -36,9 +36,9 @@ struct ArticulateIntroStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Articulate any selected text")
+                Text("Rewrite any selected text")
                     .font(.system(size: 22, weight: .semibold))
-                Text("Select text in any app, press your hotkey, and Jot articulates it with AI — rewrite a paragraph, convert a note into a list, translate a sentence, clean up a message.")
+                Text("Select text in any app, press your hotkey, and Jot rewrites it with AI — rewrite a paragraph, convert a note into a list, translate a sentence, clean up a message.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -86,8 +86,8 @@ struct ArticulateIntroStep: View {
         VStack(alignment: .leading, spacing: 10) {
             transcriptBlock(label: "YOUR TEXT", text: transcript, color: .secondary)
 
-            if phase == .success, !articulatedText.isEmpty {
-                transcriptBlock(label: "ARTICULATED", text: articulatedText, color: .accentColor)
+            if phase == .success, !rewrittenText.isEmpty {
+                transcriptBlock(label: "REWRITTEN", text: rewrittenText, color: .accentColor)
             }
 
             if let msg = errorMessage {
@@ -142,8 +142,8 @@ struct ArticulateIntroStep: View {
 
     private var buttonLabel: LocalizedStringKey {
         switch phase {
-        case .idle: return "Preview Articulate"
-        case .loading: return "Articulating…"
+        case .idle: return "Preview Rewrite"
+        case .loading: return "Rewriting…"
         case .success: return "Run again"
         }
     }
@@ -153,17 +153,17 @@ struct ArticulateIntroStep: View {
               !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return }
         phase = .loading
-        articulatedText = ""
+        rewrittenText = ""
         errorMessage = nil
         let service = resolveAIService()
         Task {
             do {
-                let result = try await service.articulate(
+                let result = try await service.rewrite(
                     selectedText: transcript,
-                    instruction: "Articulate this"
+                    instruction: "Rewrite this"
                 )
                 await MainActor.run {
-                    articulatedText = result
+                    rewrittenText = result
                     phase = .success
                 }
             } catch {
@@ -180,13 +180,13 @@ struct ArticulateIntroStep: View {
     private var hotkeysList: some View {
         VStack(alignment: .leading, spacing: 12) {
             hotkeyRow(
-                name: .articulate,
-                title: "Articulate",
-                description: "Fixed prompt: \u{201C}Articulate this.\u{201D} No speaking — press the hotkey and Jot rewrites your selection."
+                name: .rewrite,
+                title: "Rewrite",
+                description: "Fixed prompt: \u{201C}Rewrite this.\u{201D} No speaking — press the hotkey and Jot rewrites your selection."
             )
             hotkeyRow(
-                name: .articulateCustom,
-                title: "Articulate (Custom)",
+                name: .rewriteWithVoice,
+                title: "Rewrite with Voice",
                 description: "Press the hotkey, then speak an instruction like \u{201C}translate to Japanese\u{201D} or \u{201C}shorten to two sentences.\u{201D}"
             )
         }

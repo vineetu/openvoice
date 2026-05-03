@@ -314,7 +314,7 @@ struct VoiceBubble: View {
             Image(systemName: "mic.fill")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.secondary)
-            Text("articulate this")
+            Text("rewrite this")
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(.secondary)
         }
@@ -724,10 +724,10 @@ struct TransformArrow: View {
     }
 }
 
-// MARK: - ArticulateFlow
+// MARK: - RewriteFlow
 
 /// Selection → mic → rewritten selection.
-struct ArticulateFlow: View {
+struct RewriteFlow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             SelectionCaret()
@@ -749,12 +749,12 @@ struct ArticulateFlow: View {
     }
 }
 
-// MARK: - ArticulateRecipes
+// MARK: - RewriteRecipes
 
-/// Grid of example spoken instructions the user can give to Articulate
-/// (Custom). Replaces the earlier `ArticulateFlow` visual in Help when the
+/// Grid of example spoken instructions the user can give to Rewrite with
+/// Voice. Replaces the earlier `RewriteFlow` visual in Help when the
 /// card's goal shifted from "what happens" to "what can I say."
-struct ArticulateRecipes: View {
+struct RewriteRecipes: View {
     private let recipes = [
         "translate to Japanese",
         "make this a numbered list",

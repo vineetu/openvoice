@@ -12,7 +12,7 @@ final class OverlayWindowController {
 
     private let recorder: RecorderController
     private let delivery: DeliveryService
-    private let articulateController: ArticulateController?
+    private let rewriteController: RewriteController?
     private let pipeline: VoiceInputPipeline
     private let model: PillViewModel
     private let amplitudePublisher = AmplitudePublisher()
@@ -34,14 +34,14 @@ final class OverlayWindowController {
     init(
         recorder: RecorderController,
         delivery: DeliveryService,
-        articulateController: ArticulateController? = nil,
+        rewriteController: RewriteController? = nil,
         pipeline: VoiceInputPipeline
     ) {
         self.recorder = recorder
         self.delivery = delivery
-        self.articulateController = articulateController
+        self.rewriteController = rewriteController
         self.pipeline = pipeline
-        self.model = PillViewModel(recorder: recorder, delivery: delivery, articulateController: articulateController)
+        self.model = PillViewModel(recorder: recorder, delivery: delivery, rewriteController: rewriteController)
     }
 
     func install() {

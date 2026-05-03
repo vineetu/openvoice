@@ -41,10 +41,10 @@ actor LLMClient {
         return configuration
     }
 
-    /// Articulate a selection according to the user's spoken instruction.
-    /// (Formerly `rewrite(…)` — renamed with the v1.5 "Articulate (Custom)"
-    /// relabel. Behaviorally identical to v1.4 `rewrite`.)
-    func articulate(selectedText: String, instruction: String) async throws -> String {
+    /// Rewrite a selection according to the user's instruction. Used by
+    /// both Rewrite (fixed prompt) and Rewrite with Voice (voice-driven
+    /// instruction) flows.
+    func rewrite(selectedText: String, instruction: String) async throws -> String {
         let config = await MainActor.run { [llmConfiguration] in
             let c = llmConfiguration
             let p = c.provider
@@ -53,38 +53,38 @@ actor LLMClient {
                 apiKey: c.apiKey(for: p),
                 baseURL: c.effectiveBaseURL(for: p),
                 model: c.effectiveModel(for: p),
-                sharedInvariants: c.articulatePrompt
+                sharedInvariants: c.rewritePrompt
             )
         }
 
         // Route the instruction to a branch-specific tendency block.
         // The classifier is a hint, not a gate — the user's instruction
         // is embedded verbatim below and always wins over the tendency.
-        let branch = ArticulateInstructionClassifier.classify(instruction)
+        let branch = RewriteInstructionClassifier.classify(instruction)
         let systemPrompt = """
             \(config.sharedInvariants)
 
-            \(ArticulateBranchPrompt.prompt(for: branch))
+            \(RewriteBranchPrompt.prompt(for: branch))
             """
 
         // On-device Apple Intelligence short-circuits the HTTP path entirely.
         if config.provider == .appleIntelligence {
             do {
-                return try await appleClient.articulate(
+                return try await appleClient.rewrite(
                     selectedText: selectedText,
                     instruction: instruction,
                     branchPrompt: systemPrompt
                 )
             } catch {
                 let mapped = mapError(error)
-                logLLMError(mapped, provider: config.provider, request: nil, streaming: false, op: "articulate")
+                logLLMError(mapped, provider: config.provider, request: nil, streaming: false, op: "rewrite")
                 throw mapped
             }
         }
 
         if config.provider.requiresUserAPIKey {
             guard !config.apiKey.isEmpty else {
-                Task { await self.logSink.error(component: "LLMClient", message: "Missing API key", context: ["provider": config.provider.rawValue, "op": "articulate"]) }
+                Task { await self.logSink.error(component: "LLMClient", message: "Missing API key", context: ["provider": config.provider.rawValue, "op": "rewrite"]) }
                 throw LLMError.noAPIKey
             }
         }
@@ -348,7 +348,7 @@ actor LLMClient {
         // caused Test Connection failures in Settings → AI. A dead
         // local Ollama daemon still fails fast — the OS rejects the
         // TCP connection immediately, and the outer per-request
-        // `timeoutInterval` (15s for healthCheck, 60s for articulate/
+        // `timeoutInterval` (15s for healthCheck, 60s for rewrite/
         // transform) still bounds the wait. Reachability semantics are
         // preserved for cloud providers (OpenAI/Anthropic/Gemini),
         // which stay at 3s.
@@ -696,7 +696,7 @@ actor LLMClient {
             userPrompt: transcript,
             stream: shouldStream(provider: config.provider)
         )
-        // See the matching comment in `articulate(...)`: per-request override
+        // See the matching comment in `rewrite(...)`: per-request override
         // keeps between-byte gaps from tripping the tight session default.
         // Reachability is enforced separately via the first-byte watchdog
         // inside `streamResponse`.

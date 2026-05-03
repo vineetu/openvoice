@@ -25,7 +25,7 @@ import Testing
 /// `.serialized` because the suite shares process-global state
 /// (`@AppStorage` keys, `StubURLProtocol.pending`,
 /// `FirstRunState.shared`) with other harness suites. Same rationale
-/// as `ArticulateFlowTests`.
+/// as `RewriteFlowTests`.
 @MainActor
 @Suite(.serialized)
 struct AskJotFlowTests {

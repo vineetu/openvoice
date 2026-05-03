@@ -62,12 +62,12 @@ enum HarnessTimeoutError: Error, Equatable {
     case timedOut
 }
 
-extension ArticulateController {
+extension RewriteController {
 
     /// Test-only helper: suspend until `state` reaches `.idle` or `.error`,
     /// or `timeout` elapses. Same shape as the `RecorderController`
-    /// version above — Phase 1.5 articulate flows are driven through
-    /// `controller.toggle()` (custom) and `controller.articulate()`
+    /// version above — Phase 1.5 rewrite flows are driven through
+    /// `controller.toggle()` (custom) and `controller.rewrite()`
     /// (fixed); both produce a terminal `.idle` (success) or `.error`
     /// (failure) once the LLM call lands.
     func awaitTerminalState(timeout: Duration) async throws {
@@ -95,7 +95,7 @@ extension ArticulateController {
         }
     }
 
-    private static func isTerminal(_ state: ArticulateState) -> Bool {
+    private static func isTerminal(_ state: RewriteState) -> Bool {
         switch state {
         case .idle, .error: return true
         case .capturing, .recording, .transcribing, .rewriting: return false

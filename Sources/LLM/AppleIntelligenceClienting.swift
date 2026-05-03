@@ -6,7 +6,7 @@ import Foundation
 /// conformers in `Tests/JotHarness/` return canned strings without touching
 /// the on-device model.
 ///
-/// Two operational methods (`transform`, `articulate`) plus an availability
+/// Two operational methods (`transform`, `rewrite`) plus an availability
 /// gate (`isAvailable`). Method signatures mirror `AppleIntelligenceClient`'s
 /// existing public surface verbatim.
 ///
@@ -31,12 +31,12 @@ protocol AppleIntelligenceClienting: Sendable {
     /// the model isn't available on this machine.
     func transform(transcript: String, instruction: String) async throws -> String
 
-    /// Articulate a user selection. The caller composes the combined system
+    /// Rewrite a user selection. The caller composes the combined system
     /// prompt (shared invariants + branch tendency) into `branchPrompt` and
     /// hands the seam the selection plus the user's (voice or fixed)
     /// instruction. Throws `LLMError.appleIntelligenceUnavailable` when
     /// the model isn't available.
-    func articulate(selectedText: String, instruction: String, branchPrompt: String) async throws -> String
+    func rewrite(selectedText: String, instruction: String, branchPrompt: String) async throws -> String
 
     /// Stream an Ask Jot turn through Apple Intelligence. Returns a
     /// delta-token stream backed by `LanguageModelSession.streamResponse`.

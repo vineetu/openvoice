@@ -22,7 +22,7 @@ import Foundation
 final class SoundTriggers {
     private let player: SoundPlayer
     private var previousState: RecorderController.State = .idle
-    private var previousArticulateState: ArticulateController.ArticulateState = .idle
+    private var previousRewriteState: RewriteController.RewriteState = .idle
     private var cancellables: Set<AnyCancellable> = []
 
     convenience init() {
@@ -48,18 +48,18 @@ final class SoundTriggers {
             .store(in: &cancellables)
     }
 
-    /// Subscribe the articulate controller's state machine into the same
-    /// chime vocabulary. Articulate Custom mirrors the dictation flow:
+    /// Subscribe the rewrite controller's state machine into the same
+    /// chime vocabulary. Rewrite with Voice mirrors the dictation flow:
     /// `.recording` fires `recordingStart`, `recording → transcribing`
     /// fires `recordingStop`, `.rewriting → .idle` is treated as the
     /// paste-back "done" moment and fires `transcriptionComplete`.
-    /// Articulate Fixed skips the `.recording` step entirely, so it
+    /// Rewrite (fixed) skips the `.recording` step entirely, so it
     /// silently passes through capturing → rewriting → idle with only
     /// the terminal `transcriptionComplete` chime on success.
-    func start(articulate: ArticulateController) {
-        articulate.$state
+    func start(rewrite: RewriteController) {
+        rewrite.$state
             .sink { [weak self] next in
-                self?.handleArticulateTransition(to: next)
+                self?.handleRewriteTransition(to: next)
             }
             .store(in: &cancellables)
     }
@@ -87,17 +87,17 @@ final class SoundTriggers {
         }
     }
 
-    private func handleArticulateTransition(
-        to next: ArticulateController.ArticulateState
+    private func handleRewriteTransition(
+        to next: RewriteController.RewriteState
     ) {
-        defer { previousArticulateState = next }
+        defer { previousRewriteState = next }
 
-        switch (previousArticulateState, next) {
+        switch (previousRewriteState, next) {
         case (_, .recording):
             // Entering the mic-live phase from capturing (or error recovery).
             // Uses a dedicated chime (pitch-shifted from recordingStart) so
-            // Articulate Custom is audibly distinguishable from dictation.
-            player.play(.articulateStart)
+            // Rewrite with Voice is audibly distinguishable from dictation.
+            player.play(.rewriteStart)
 
         case (.recording, .transcribing):
             player.play(.recordingStop)
@@ -107,7 +107,7 @@ final class SoundTriggers {
             player.play(.recordingCancel)
 
         case (.rewriting, .idle):
-            // LLM finished and paste-back succeeded — the Articulate
+            // LLM finished and paste-back succeeded — the Rewrite
             // analogue of dictation's `lastResult` emission.
             player.play(.transcriptionComplete)
 

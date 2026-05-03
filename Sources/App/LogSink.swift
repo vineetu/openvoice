@@ -9,11 +9,11 @@ import Foundation
 ///
 /// **Scope of the Phase 0.10 migration is calibrated** per the brief:
 /// only the operational hot-path consumers that fire during the four
-/// `JotHarness` flow methods (`dictate`, `articulateCustom`,
+/// `JotHarness` flow methods (`dictate`, `rewriteWithVoice`,
 /// `askJotVoice`, `runWizard`) thread the seam. Today that's:
 ///
 /// - `RecorderController` — Transform-fallback log on dictation path.
-/// - `ArticulateController` — every error-state path the user reaches.
+/// - `RewriteController` — every error-state path the user reaches.
 /// - `DeliveryService` — clipboard-write / synthetic-paste failures.
 /// - `LLMClient` — the I2-relevant redacted HTTP error log.
 ///

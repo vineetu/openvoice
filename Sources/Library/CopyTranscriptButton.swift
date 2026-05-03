@@ -20,6 +20,14 @@ struct CopyTranscriptButton: View {
     /// Optional accessibility label override. Defaults to "Copy transcript".
     var accessibilityLabel: String = "Copy transcript"
 
+    /// Hover/tooltip help text. Defaults to "Copy transcript". Rewrite
+    /// rows pass "Copy output" so the help string matches what they
+    /// actually copy.
+    var helpLabel: String = "Copy transcript"
+
+    /// Empty-state help text. Defaults to "No transcript to copy".
+    var emptyHelpLabel: String = "No transcript to copy"
+
     /// Point size for the SF Symbol. 12 pt matches the row's metadata text.
     var pointSize: CGFloat = 12
 
@@ -46,7 +54,7 @@ struct CopyTranscriptButton: View {
         .buttonStyle(.plain)
         .disabled(isDisabled)
         .onHover { hovering = $0 }
-        .help(isDisabled ? "No transcript to copy" : (copied ? "Copied" : "Copy transcript"))
+        .help(isDisabled ? emptyHelpLabel : (copied ? "Copied" : helpLabel))
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(.isButton)
     }

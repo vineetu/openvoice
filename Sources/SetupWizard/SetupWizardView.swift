@@ -91,7 +91,7 @@ struct SetupWizardView: View {
         case .test: TestStep()
         case .done: DoneStep()
         case .cleanup: CleanupStep()
-        case .articulateIntro: ArticulateIntroStep()
+        case .rewriteIntro: RewriteIntroStep()
         }
     }
 

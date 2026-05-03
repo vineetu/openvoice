@@ -7,28 +7,28 @@ import os.log
 ///
 /// Responsibilities:
 ///   - Register the always-on shortcuts (toggleRecording, pushToTalk,
-///     pasteLastTranscription, articulateCustom, articulate) at `activate()`.
+///     pasteLastTranscription, rewriteWithVoice, rewrite) at `activate()`.
 ///   - Dynamically enable/disable `cancelRecording` (plain Esc) so that
 ///     other apps keep Esc while Jot is idle. Cancel is active only while
 ///     a cancellable pipeline is running (recording, transforming,
-///     capturing for articulate, transcribing for articulate, rewriting).
+///     capturing for rewrite, transcribing for rewrite, rewriting).
 @MainActor
 final class HotkeyRouter {
     private let recorder: RecorderController
     private let delivery: DeliveryService
-    private let articulateController: ArticulateController?
+    private let rewriteController: RewriteController?
     private let log = Logger(subsystem: "com.jot.Jot", category: "HotkeyRouter")
 
     private var stateObserver: AnyCancellable?
-    private var articulateStateObserver: AnyCancellable?
+    private var rewriteStateObserver: AnyCancellable?
     private var activated = false
     private var cancelEnabled = false
     private var pttPendingRelease = false
 
-    init(recorder: RecorderController, delivery: DeliveryService, articulateController: ArticulateController? = nil) {
+    init(recorder: RecorderController, delivery: DeliveryService, rewriteController: RewriteController? = nil) {
         self.recorder = recorder
         self.delivery = delivery
-        self.articulateController = articulateController
+        self.rewriteController = rewriteController
     }
 
     /// Install shortcut handlers and start observing recorder state. Idempotent.
@@ -52,8 +52,8 @@ final class HotkeyRouter {
             self.log.info("cancelRecording fired")
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if let articulate = self.articulateController, Self.isArticulateCancellable(articulate.state) {
-                    await articulate.cancel()
+                if let rewrite = self.rewriteController, Self.isRewriteCancellable(rewrite.state) {
+                    await rewrite.cancel()
                 } else {
                     await self.recorder.cancel()
                 }
@@ -97,22 +97,22 @@ final class HotkeyRouter {
             Task { @MainActor in await self.delivery.pasteLast() }
         }
 
-        if let articulateController {
-            KeyboardShortcuts.onKeyDown(for: .articulateCustom) { [weak articulateController] in
-                guard let articulateController else { return }
+        if let rewriteController {
+            KeyboardShortcuts.onKeyDown(for: .rewriteWithVoice) { [weak rewriteController] in
+                guard let rewriteController else { return }
                 Task { @MainActor in
-                    await articulateController.toggle()
+                    await rewriteController.toggle()
                 }
             }
 
-            // v1.5 — fixed-prompt Articulate. Selection → LLM → paste with
-            // the literal "Articulate this" instruction (no voice step, no
+            // v1.5 — fixed-prompt Rewrite. Selection → LLM → paste with
+            // the literal "Rewrite this" instruction (no voice step, no
             // classifier). Shares the selection-capture + paste-back path
-            // with Articulate (Custom).
-            KeyboardShortcuts.onKeyDown(for: .articulate) { [weak articulateController] in
-                guard let articulateController else { return }
+            // with Rewrite with Voice.
+            KeyboardShortcuts.onKeyDown(for: .rewrite) { [weak rewriteController] in
+                guard let rewriteController else { return }
                 Task { @MainActor in
-                    await articulateController.articulate()
+                    await rewriteController.rewrite()
                 }
             }
         }
@@ -121,31 +121,31 @@ final class HotkeyRouter {
         KeyboardShortcuts.disable(.cancelRecording)
         cancelEnabled = false
 
-        // Every transition in recorder/articulate state drives enable/disable
+        // Every transition in recorder/rewrite state drives enable/disable
         // of the cancel shortcut. Each observer MUST pass its own new value
         // into `updateCancelEnablement` — `@Published` fires on willSet, so
-        // re-reading `recorder.state` / `articulateController.state` inside the
+        // re-reading `recorder.state` / `rewriteController.state` inside the
         // closure would return the pre-transition value and miss the edge.
         stateObserver = recorder.$state.sink { [weak self] newRecorderState in
             guard let self else { return }
             self.updateCancelEnablement(
                 recorderState: newRecorderState,
-                articulateState: self.articulateController?.state
+                rewriteState: self.rewriteController?.state
             )
         }
 
-        if let articulateController {
-            articulateStateObserver = articulateController.$state.sink { [weak self] newArticulateState in
+        if let rewriteController {
+            rewriteStateObserver = rewriteController.$state.sink { [weak self] newRewriteState in
                 guard let self else { return }
                 self.updateCancelEnablement(
                     recorderState: self.recorder.state,
-                    articulateState: newArticulateState
+                    rewriteState: newRewriteState
                 )
             }
         }
     }
 
-    private static func isArticulateCancellable(_ state: ArticulateController.ArticulateState) -> Bool {
+    private static func isRewriteCancellable(_ state: RewriteController.RewriteState) -> Bool {
         switch state {
         case .idle, .error: false
         case .capturing, .recording, .transcribing, .rewriting: true
@@ -154,7 +154,7 @@ final class HotkeyRouter {
 
     private func updateCancelEnablement(
         recorderState: RecorderController.State,
-        articulateState: ArticulateController.ArticulateState?
+        rewriteState: RewriteController.RewriteState?
     ) {
         let recorderActive: Bool
         switch recorderState {
@@ -162,14 +162,14 @@ final class HotkeyRouter {
         case .idle, .error: recorderActive = false
         }
 
-        let articulateActive: Bool
-        if let articulateState {
-            articulateActive = Self.isArticulateCancellable(articulateState)
+        let rewriteActive: Bool
+        if let rewriteState {
+            rewriteActive = Self.isRewriteCancellable(rewriteState)
         } else {
-            articulateActive = false
+            rewriteActive = false
         }
 
-        let shouldEnable = recorderActive || articulateActive
+        let shouldEnable = recorderActive || rewriteActive
         guard shouldEnable != cancelEnabled else { return }
         cancelEnabled = shouldEnable
         if shouldEnable {

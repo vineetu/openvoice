@@ -260,7 +260,7 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/Sources/LLM/GroundingDocFacts.swift",
-				"$(SRCROOT)/Sources/LLM/ArticulateInstructionClassifier.swift",
+				"$(SRCROOT)/Sources/LLM/RewriteInstructionClassifier.swift",
 				"$(SRCROOT)/tools/generate-fragments.swift",
 			);
 			name = "Generate Help Fragments";
@@ -277,8 +277,8 @@
 				"$(SRCROOT)/Resources/fragments/costs.md",
 				"$(SRCROOT)/Resources/fragments/default-shortcuts.md",
 				"$(SRCROOT)/Resources/fragments/default-shortcuts-toggle.md",
-				"$(SRCROOT)/Resources/fragments/default-shortcuts-articulate-custom.md",
-				"$(SRCROOT)/Resources/fragments/default-shortcuts-articulate-fixed.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-rewrite-with-voice.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-rewrite.md",
 				"$(SRCROOT)/Resources/fragments/default-shortcuts-paste-last.md",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -306,8 +306,8 @@
 				"$(SRCROOT)/Resources/fragments/costs.md",
 				"$(SRCROOT)/Resources/fragments/default-shortcuts.md",
 				"$(SRCROOT)/Resources/fragments/default-shortcuts-toggle.md",
-				"$(SRCROOT)/Resources/fragments/default-shortcuts-articulate-custom.md",
-				"$(SRCROOT)/Resources/fragments/default-shortcuts-articulate-fixed.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-rewrite-with-voice.md",
+				"$(SRCROOT)/Resources/fragments/default-shortcuts-rewrite.md",
 				"$(SRCROOT)/Resources/fragments/default-shortcuts-paste-last.md",
 			);
 			name = "Concat Help Content";

@@ -712,7 +712,7 @@ final class HelpChatStore {
     /// if the file is missing (pre-2B landing, tests, etc).
     private func buildInstructions(userConfig: UserConfigSnapshot) -> String {
         return """
-        You are Jot's in-app help assistant. Jot is a Mac dictation app that transcribes speech to text system-wide, entirely on-device, with optional LLM cleanup and a voice-driven text rewrite feature called Articulate.
+        You are Jot's in-app help assistant. Jot is a Mac dictation app that transcribes speech to text system-wide, entirely on-device, with optional LLM cleanup, plus optional selected-text rewriting via two features named Rewrite and Rewrite with Voice.
 
         STYLE: write like a tight editorial service column, not a support article.
         ALWAYS cite a feature's slug in square brackets on first mention, like [toggle-recording]. DO NOT skip the brackets.
@@ -803,7 +803,8 @@ final class HelpChatStore {
         // Custom vocabulary
         ("vocabulary list", "custom-vocabulary"),
         ("vocabulary entries", "custom-vocabulary"),
-        // Articulate
+        // Rewrite — legacy phrasing alias preserved by rename migration so
+        // prior user vocabulary still resolves the deep-link slug.
         ("rewrite selection", "articulate-custom"),
         // Push-to-talk spacing variants (title is "Push to talk" without hyphens)
         ("push-to-talk", "push-to-talk"),
@@ -1055,7 +1056,7 @@ final class HelpChatStore {
 
     On-device Mac dictation. Hotkey → speak → transcript pastes at cursor.
     Entirely local by default; cloud providers optional for Cleanup and
-    Articulate.
+    Rewrite.
 
     ## Dictation
 
@@ -1086,15 +1087,15 @@ final class HelpChatStore {
 
     Editable prompt [cleanup-prompt]: customize in Settings → AI.
 
-    ## Articulate (optional)
+    ## Rewrite (optional)
 
     Rewrite selected text via a global shortcut.
 
-    Articulate Custom [articulate-custom]: select → hotkey → speak an
+    Rewrite with Voice [articulate-custom]: select → hotkey → speak an
     instruction → result replaces selection.
 
-    Articulate Fixed [articulate-fixed]: select → hotkey → fixed
-    "Articulate this" instruction, no voice step.
+    Rewrite [articulate-fixed]: select → hotkey → fixed
+    "Rewrite this" instruction, no voice step.
 
     Intent classifier [articulate-intent-classifier]: routes instructions
     into voice-preserving, structural, translation, or code branches.
@@ -1114,13 +1115,13 @@ final class HelpChatStore {
       card.
     - AI unavailable [ai-unavailable] or connection failed
       [ai-connection-failed]: see Troubleshooting.
-    - Articulate giving bad results [articulate-bad-results]: reset prompt
+    - Rewrite giving bad results [articulate-bad-results]: reset prompt
       to default first.
 
     ## Privacy
 
     Local-only by default. No telemetry. Cloud providers only receive text
-    if you enable Cleanup or Articulate with a cloud provider configured.
+    if you enable Cleanup or Rewrite with a cloud provider configured.
     """
 
     // MARK: - Live snapshot factory

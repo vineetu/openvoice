@@ -40,7 +40,7 @@ public struct HarnessSeed: Sendable {
 
 /// `StubAudioCapture` playback mode. The audio *content* is supplied
 /// per-flow via `AudioSource` (passed to `dictate(audio:)`,
-/// `articulateCustom(instruction:)`, etc.); this seed only picks how the
+/// `rewriteWithVoice(instruction:)`, etc.); this seed only picks how the
 /// stub reacts to `start()` / `stop()`.
 public enum AudioSeed: Sendable {
     /// In-memory stub that replays whatever the test passes to the flow's
@@ -78,12 +78,12 @@ public enum NetworkSeed: Sendable {
 /// Apple Intelligence (`FoundationModels`) seam stub mode.
 public enum AppleIntelligenceSeed: Sendable {
     /// Default stub — returns canned strings for `transform` /
-    /// `articulate`. Per-call canned strings are enqueued by the flow
+    /// `rewrite`. Per-call canned strings are enqueued by the flow
     /// method via `ProviderSeed.appleIntelligence`.
     case stub
     /// Stub reports `isAvailable == false`. Tests cloud-fallback paths.
     case unavailable
-    /// Stub blocks `articulate(...)` until the harness cancels the
+    /// Stub blocks `rewrite(...)` until the harness cancels the
     /// in-flight task. Required by the I1 ChatbotVoiceInput regression
     /// (`askJotVoice(cancelAfter: .condensing)`) — without a way to
     /// outlive the cancel signal, no other case exposes
@@ -275,7 +275,7 @@ public enum AskJotPhase: Sendable {
     /// Cancel during voice capture (before condensation begins).
     case audioCapture
     /// Cancel during condensation (the I1 target — Apple Intelligence
-    /// `articulate` running over the spoken question).
+    /// `rewrite` running over the spoken question).
     case condensing
     /// Cancel after the cloud streaming call has been issued.
     case cloudCall

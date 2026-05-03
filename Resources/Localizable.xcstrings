@@ -78,38 +78,31 @@
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
-    "Articulate" : {
-      "comment" : "Help Basics — Articulate hero title; also Setup wizard hotkey row label",
+    "Rewrite" : {
+      "comment" : "Help Basics — Rewrite hero title; also Setup wizard hotkey row label",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Articulate" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rewrite" } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
-    "Articulate (Custom)" : {
-      "comment" : "Help Basics + Setup wizard — Articulate Custom (voice-driven) hotkey label",
+    "Rewrite with Voice" : {
+      "comment" : "Help Basics + Setup wizard — Rewrite with Voice (voice-driven) hotkey label",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Articulate (Custom)" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rewrite with Voice" } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
-    "Articulate (Fixed)" : {
-      "comment" : "Help Basics — Articulate Fixed (no-voice) sub-row label",
+    "Rewrite any selected text" : {
+      "comment" : "Setup wizard Rewrite intro step title",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Articulate (Fixed)" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rewrite any selected text" } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
-    "Articulate any selected text" : {
-      "comment" : "Setup wizard Articulate intro step title",
+    "Rewriting…" : {
+      "comment" : "Setup wizard Rewrite intro — preview button label while LLM call is in flight",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Articulate any selected text" } },
-        "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
-      }
-    },
-    "Articulating…" : {
-      "comment" : "Setup wizard Articulate intro — preview button label while LLM call is in flight",
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Articulating…" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rewriting…" } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
@@ -254,7 +247,7 @@
       }
     },
     "Done" : {
-      "comment" : "Setup wizard Articulate intro — primary button label (final step)",
+      "comment" : "Setup wizard Rewrite intro — primary button label (final step)",
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Done" } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
@@ -373,7 +366,7 @@
       }
     },
     "Intent classifier" : {
-      "comment" : "Help Basics — Articulate sub-row label for intent classifier",
+      "comment" : "Help Basics — Rewrite sub-row label for intent classifier",
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Intent classifier" } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
@@ -387,7 +380,7 @@
       }
     },
     "Jot is still in development. If you hit issues, you can share diagnostic logs from the About tab — nothing is sent to us unless you copy and send them yourself." : {
-      "comment" : "Setup wizard Articulate intro footer note",
+      "comment" : "Setup wizard Rewrite intro footer note",
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Jot is still in development. If you hit issues, you can share diagnostic logs from the About tab — nothing is sent to us unless you copy and send them yourself." } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
@@ -456,6 +449,13 @@
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
+    "Keep library items" : {
+      "comment" : "Settings → General retention picker label. \"Library items\" covers both dictation recordings and Rewrite sessions, since the same retention setting governs both.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keep library items" } },
+        "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
+      }
+    },
     "Languages" : {
       "comment" : "Help Basics — Dictation sub-row label for the Languages section (added in v1.7 Japanese support)",
       "localizations" : {
@@ -491,10 +491,10 @@
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
-    "LLM cleanup, voice-driven rewrite (Articulate), and custom vocabulary are ready whenever you're curious — in Settings, or by re-running this wizard from Settings → General." : {
+    "LLM cleanup, voice-driven rewrite (Rewrite with Voice), and custom vocabulary are ready whenever you're curious — in Settings, or by re-running this wizard from Settings → General." : {
       "comment" : "Setup wizard Done step advanced hint card body",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "LLM cleanup, voice-driven rewrite (Articulate), and custom vocabulary are ready whenever you're curious — in Settings, or by re-running this wizard from Settings → General." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "LLM cleanup, voice-driven rewrite (Rewrite with Voice), and custom vocabulary are ready whenever you're curious — in Settings, or by re-running this wizard from Settings → General." } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
@@ -575,6 +575,13 @@
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
+    "Older library items are deleted automatically." : {
+      "comment" : "Settings → General retention helper text. \"Library items\" covers both dictation recordings and Rewrite sessions; the same `jot.retentionDays` setting drives both kinds.",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Older library items are deleted automatically." } },
+        "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
+      }
+    },
     "On-device transcription" : {
       "comment" : "Help Basics — Dictation sub-row label for on-device transcription",
       "localizations" : {
@@ -618,7 +625,7 @@
       }
     },
     "Optional. Select text, press a shortcut, speak an instruction or take a fixed pass — Jot rewrites in place." : {
-      "comment" : "Help Basics — Articulate hero subtitle",
+      "comment" : "Help Basics — Rewrite hero subtitle",
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Optional. Select text, press a shortcut, speak an instruction or take a fixed pass — Jot rewrites in place." } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
@@ -680,10 +687,10 @@
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
-    "Preview Articulate" : {
-      "comment" : "Setup wizard Articulate intro — preview button label (idle state)",
+    "Preview Rewrite" : {
+      "comment" : "Setup wizard Rewrite intro — preview button label (idle state)",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preview Articulate" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Preview Rewrite" } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
@@ -786,7 +793,7 @@
       }
     },
     "Same AI provider as Cleanup — change in Settings → AI. Rebind either hotkey in Settings → Shortcuts." : {
-      "comment" : "Setup wizard Articulate intro footer",
+      "comment" : "Setup wizard Rewrite intro footer",
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Same AI provider as Cleanup — change in Settings → AI. Rebind either hotkey in Settings → Shortcuts." } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
@@ -799,24 +806,24 @@
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
-    "Select any text, press the shortcut, speak an instruction like 'make this formal' or 'translate to Japanese' — the articulated text replaces your selection." : {
-      "comment" : "Help Basics — Articulate Custom sub-row prose",
+    "Select any text, press the shortcut, speak an instruction like 'make this formal' or 'translate to Japanese' — the rewritten text replaces your selection." : {
+      "comment" : "Help Basics — Rewrite Custom sub-row prose",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select any text, press the shortcut, speak an instruction like 'make this formal' or 'translate to Japanese' — the articulated text replaces your selection." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select any text, press the shortcut, speak an instruction like 'make this formal' or 'translate to Japanese' — the rewritten text replaces your selection." } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
-    "Select text in any app, press your hotkey, and Jot articulates it with AI — rewrite a paragraph, convert a note into a list, translate a sentence, clean up a message." : {
-      "comment" : "Setup wizard Articulate intro step subtitle",
+    "Select text in any app, press your hotkey, and Jot rewrites it with AI — rewrite a paragraph, convert a note into a list, translate a sentence, clean up a message." : {
+      "comment" : "Setup wizard Rewrite intro step subtitle",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select text in any app, press your hotkey, and Jot articulates it with AI — rewrite a paragraph, convert a note into a list, translate a sentence, clean up a message." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select text in any app, press your hotkey, and Jot rewrites it with AI — rewrite a paragraph, convert a note into a list, translate a sentence, clean up a message." } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
-    "Select text, press the shortcut, and Jot rewrites it with a fixed 'Articulate this' instruction. No voice step — useful when you just want a quick cleanup pass." : {
-      "comment" : "Help Basics — Articulate Fixed sub-row prose",
+    "Select text, press the shortcut, and Jot rewrites it with a fixed 'Rewrite this' instruction. No voice step — useful when you just want a quick cleanup pass." : {
+      "comment" : "Help Basics — Rewrite Fixed sub-row prose",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select text, press the shortcut, and Jot rewrites it with a fixed 'Articulate this' instruction. No voice step — useful when you just want a quick cleanup pass." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select text, press the shortcut, and Jot rewrites it with a fixed 'Rewrite this' instruction. No voice step — useful when you just want a quick cleanup pass." } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
@@ -1066,16 +1073,16 @@
       }
     },
     "Press the hotkey, then speak an instruction like “translate to Japanese” or “shorten to two sentences.”" : {
-      "comment" : "Setup wizard Articulate intro hotkey description (Custom)",
+      "comment" : "Setup wizard Rewrite intro hotkey description (Custom)",
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Press the hotkey, then speak an instruction like “translate to Japanese” or “shorten to two sentences.”" } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
-    "Fixed prompt: “Articulate this.” No speaking — press the hotkey and Jot rewrites your selection." : {
-      "comment" : "Setup wizard Articulate intro hotkey description (Fixed)",
+    "Fixed prompt: “Rewrite this.” No speaking — press the hotkey and Jot rewrites your selection." : {
+      "comment" : "Setup wizard Rewrite intro hotkey description (Fixed)",
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fixed prompt: “Articulate this.” No speaking — press the hotkey and Jot rewrites your selection." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fixed prompt: “Rewrite this.” No speaking — press the hotkey and Jot rewrites your selection." } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }
       }
     },
@@ -1220,7 +1227,7 @@
       }
     },
     "Voice-driven rewrite — unbound by default" : {
-      "comment" : "Help Basics — Articulate Custom inline tip description",
+      "comment" : "Help Basics — Rewrite Custom inline tip description",
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Voice-driven rewrite — unbound by default" } },
         "ja" : { "stringUnit" : { "state" : "new", "value" : "" } }

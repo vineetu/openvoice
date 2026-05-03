@@ -10,7 +10,7 @@ import Foundation
 /// poking System Settings.
 ///
 /// The shape mirrors `PermissionsService`'s existing public surface so
-/// the operational call sites (`DeliveryService`, `ArticulateController`,
+/// the operational call sites (`DeliveryService`, `RewriteController`,
 /// `VoiceInputPipeline`) can swap to the protocol with a one-line type
 /// change.
 ///
@@ -27,7 +27,7 @@ import Foundation
 @MainActor
 protocol PermissionsObserving: AnyObject, Sendable {
     /// Last-known grant map. Read by every operational consumer to gate
-    /// the recording / paste / articulate flows.
+    /// the recording / paste / rewrite flows.
     var statuses: [Capability: PermissionStatus] { get }
 
     /// Single-capability lookup. Convenience for `statuses[capability] ?? .notDetermined`

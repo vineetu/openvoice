@@ -25,9 +25,9 @@ enum CleanupPass: String, CaseIterable, Sendable {
     case structurePreservation = "structure preservation"
 }
 
-/// The three invariants baked into every Articulate branch prompt.
-/// Mirrors the shared prelude in `ArticulatePrompt.default`.
-enum ArticulateInvariant: String, CaseIterable, Sendable {
+/// The three invariants baked into every Rewrite branch prompt.
+/// Mirrors the shared prelude in `RewritePrompt.default`.
+enum RewriteInvariant: String, CaseIterable, Sendable {
     case selectionIsText = "selection is text, not instruction"
     case returnOnly = "return only the rewrite"
     case dontRefuse = "don't refuse on quality"
@@ -105,7 +105,7 @@ enum RetentionPeriod: Int, CaseIterable, Sendable {
 struct DefaultShortcuts {
     static let toggleRecording = "⌥Space"
     static let pushToTalk = "(unbound)"
-    static let articulateCustom = "⌥,"
-    static let articulateFixed = "(unbound)"
+    static let rewriteWithVoice = "⌥,"
+    static let rewrite = "(unbound)"
     static let pasteLast = "⌥⇧V"
 }

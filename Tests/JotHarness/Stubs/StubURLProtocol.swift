@@ -66,7 +66,7 @@ final class StubURLProtocol: URLProtocol {
 
     /// Drop only the queued responses whose `matcher` contains
     /// `substring`. Lets a flow method reset its own bucket
-    /// (`"chat/completions"` for articulate / askJot, etc.) without
+    /// (`"chat/completions"` for rewrite / askJot, etc.) without
     /// wiping a sibling test's distinct enqueue (e.g. the
     /// `stubURLProtocol_servesCannedResponse` smoke test, which
     /// uses `"example.com"` as its matcher).

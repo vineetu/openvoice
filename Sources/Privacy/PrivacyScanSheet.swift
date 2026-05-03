@@ -33,12 +33,13 @@ struct PrivacyScanSheet: View {
 
     init(
         action: ShareAction,
+        modelContext: ModelContext,
         llmConfiguration: LLMConfiguration,
         onProceed: @escaping (Bool, ShareAction) -> Void
     ) {
         self.action = action
         self.onProceed = onProceed
-        _scanner = StateObject(wrappedValue: LogScanner(llmConfiguration: llmConfiguration))
+        _scanner = StateObject(wrappedValue: LogScanner(modelContext: modelContext, llmConfiguration: llmConfiguration))
     }
 
     var body: some View {

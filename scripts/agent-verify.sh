@@ -8,7 +8,7 @@
 #   1  (~2 min)   Default xcodebuild build + strict-concurrency build
 #                 (warning count ≤ baseline) + JotTests unit suite.
 #   2  (~5 min)   Tier 1 + the harness flow tests (dictate happy-path,
-#                 articulate fixed/custom + I2 known-issue, askJotVoice
+#                 rewrite + rewrite with voice + I2 known-issue, askJotVoice
 #                 happy/short/I1 known-issue, runWizard).
 #   3  (~10 min)  Tier 2 + a TSan-instrumented re-run of the harness
 #                 flow tests. Snapshot tests are not yet wired (Phase 1
@@ -174,7 +174,7 @@ stage_unit_tests() {
 # ---------------------------------------------------------------------
 
 stage_harness_flows() {
-    stage "harness flow tests (dictate / articulate / askJot / wizard)"
+    stage "harness flow tests (dictate / rewrite / askJot / wizard)"
     local log="$LOG_DIR/harness-flows.log"
     # Each flow suite is `.serialized` already; running them via
     # `-only-testing` keeps the harness gate active across them. We
@@ -184,7 +184,7 @@ stage_harness_flows() {
         -project Jot.xcodeproj \
         -destination "$XCODEBUILD_DESTINATION" \
         -only-testing:JotTests/DictateFlowTests \
-        -only-testing:JotTests/ArticulateFlowTests \
+        -only-testing:JotTests/RewriteFlowTests \
         -only-testing:JotTests/AskJotFlowTests \
         -only-testing:JotTests/WizardFlowTests \
         > "$log" 2>&1; then
@@ -208,7 +208,7 @@ stage_tsan() {
         -destination "$XCODEBUILD_DESTINATION" \
         -enableThreadSanitizer YES \
         -only-testing:JotTests/DictateFlowTests \
-        -only-testing:JotTests/ArticulateFlowTests \
+        -only-testing:JotTests/RewriteFlowTests \
         -only-testing:JotTests/AskJotFlowTests \
         -only-testing:JotTests/WizardFlowTests \
         > "$log" 2>&1; then

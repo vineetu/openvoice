@@ -2,11 +2,11 @@ import Foundation
 import Testing
 @testable import Jot
 
-/// Phase 1.5 acceptance: drive `JotHarness.articulate(...)` and
-/// `JotHarness.articulateCustom(...)` end-to-end through the live
-/// `ArticulateController` graph. Two happy-path tests prove the
+/// Phase 1.5 acceptance: drive `JotHarness.rewrite(...)` and
+/// `JotHarness.rewriteWithVoice(...)` end-to-end through the live
+/// `RewriteController` graph. Two happy-path tests prove the
 /// pipeline reaches the LLM and the rewrite lands on the stub
-/// pasteboard. The third test (`i2_articulateLeaksHttpBody`) is the
+/// pasteboard. The third test (`i2_rewriteLeaksHttpBody`) is the
 /// failing regression for the I2 finding in `cleanup-roadmap.md`.
 ///
 /// `.serialized` because all three tests share the
@@ -17,29 +17,29 @@ import Testing
 /// would otherwise require per-matcher uniqueness gymnastics.
 @MainActor
 @Suite(.serialized)
-struct ArticulateFlowTests {
+struct RewriteFlowTests {
 
     // MARK: - Happy-path: fixed prompt
 
-    @Test func articulateFixedHappyPath() async throws {
+    @Test func rewriteHappyPath() async throws {
         let harness = try await JotHarness(seed: .default)
-        let result = try await harness.articulate(
+        let result = try await harness.rewrite(
             selection: "hello world",
-            provider: .ollama(.respondsWith("Articulated."))
+            provider: .ollama(.respondsWith("Rewritten."))
         )
 
         #expect(result.pillError == nil)
-        #expect(result.pastedText == "Articulated.")
+        #expect(result.pastedText == "Rewritten.")
     }
 
     // MARK: - Happy-path: custom voice instruction
 
-    @Test func articulateCustomHappyPath() async throws {
+    @Test func rewriteWithVoiceHappyPath() async throws {
         let harness = try await JotHarness(seed: .default)
         // 1 second of silence — `StubTranscriber` returns canned text
         // regardless of audio content (same convention as `dictate`).
         let instruction = AudioSource.samples([Float](repeating: 0, count: 16_000))
-        let result = try await harness.articulateCustom(
+        let result = try await harness.rewriteWithVoice(
             selection: "hello world",
             instruction: instruction,
             provider: .ollama(.respondsWith("HELLO WORLD"))
@@ -53,7 +53,7 @@ struct ArticulateFlowTests {
 
     /// `cleanup-roadmap.md` I2: `LLMError.httpError`'s `errorDescription`
     /// interpolates the response body into the user-facing message,
-    /// which `ArticulateController.runFixed`'s catch block (line 365)
+    /// which `RewriteController.runFixed`'s catch block (line 365)
     /// drops straight onto the pill via `state = .error(...)`.
     ///
     /// **This test FAILS today** — the sentinel `REDACT-ME-LEAK` makes
@@ -66,11 +66,11 @@ struct ArticulateFlowTests {
     /// Phase 2 lands. When the bug is fixed, `withKnownIssue` flips
     /// the suite red because the known issue cleared — that's the
     /// signal to remove the wrapper.
-    @Test func i2_articulateNoHttpBodyLeak() async throws {
+    @Test func i2_rewriteNoHttpBodyLeak() async throws {
         let sentinel = "REDACT-ME-LEAK"
         let harness = try await JotHarness(seed: .default)
 
-        let result = try await harness.articulate(
+        let result = try await harness.rewrite(
             selection: "Hello world.",
             provider: .ollama(.respondsWith400(body: sentinel))
         )
