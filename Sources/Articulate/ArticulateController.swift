@@ -205,7 +205,21 @@ final class ArticulateController: ObservableObject {
             state = .capturing
             let selectedText = try await captureSelection()
 
-            let token = try await pipeline.startRecording(owner: .articulate)
+            // Register an `onDisconnect` closure so a mid-recording mic
+            // disconnect immediately resumes the parked second-toggle
+            // continuation. Without this the user would be stuck
+            // listening to silence until they tap again.
+            // `stopAndTranscribe` then sees `didDisconnect(token) ==
+            // true` and (because owner is `.articulate`) throws
+            // `disconnectedMidVoiceCommand`. The closure throws into the
+            // continuation so the inner `do` flow handles it as cancel.
+            let onDisconnect: @MainActor @Sendable () -> Void = { [weak self] in
+                self?.takeSecondToggleContinuation()?.resume()
+            }
+            let token = try await pipeline.startRecording(
+                owner: .articulate,
+                onDisconnect: onDisconnect
+            )
             pipelineToken = token
 
             guard pipeline.stillActive(token) else { return }
@@ -216,7 +230,8 @@ final class ArticulateController: ObservableObject {
             guard pipeline.stillActive(token) else { return }
             state = .transcribing
 
-            let (instruction, _) = try await pipeline.stopAndTranscribe(token)
+            let stopResult = try await pipeline.stopAndTranscribe(token)
+            let instruction = stopResult.text
 
             guard pipeline.stillActive(token) else { return }
             guard !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -289,6 +304,15 @@ final class ArticulateController: ObservableObject {
             state = .error("Could not start recording: \(error.localizedDescription)")
         } catch VoiceInputPipeline.PipelineError.modelMissing {
             state = .error("Transcription model is still loading — try again in a moment.")
+        } catch VoiceInputPipeline.PipelineError.disconnectedMidVoiceCommand {
+            Task {
+                await self.logSink.warn(
+                    component: "Articulate",
+                    message: "Mic disconnected during voice instruction (custom)",
+                    context: ["flow": "custom"]
+                )
+            }
+            state = .error("Mic disconnected — try again.")
         } catch VoiceInputPipeline.PipelineError.audioTooShort(let recording) {
             Task {
                 await self.logSink.warn(

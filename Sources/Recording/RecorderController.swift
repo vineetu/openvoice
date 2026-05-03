@@ -2,6 +2,17 @@ import Combine
 import Foundation
 import os.log
 
+/// Tiny atomic-flag box shared between `RecorderController.runFlow`'s
+/// disconnect closure and the catch path. Captured strongly by the
+/// closure (so the closure outlives the do-block); the catch path reads
+/// it after `stopAndTranscribe` has already thrown.
+@MainActor
+final class DisconnectFlag {
+    private var flag: Bool = false
+    var value: Bool { flag }
+    func set() { flag = true }
+}
+
 /// Top-level state machine for "press hotkey, speak, get transcript".
 ///
 /// Lives on the main actor because its `@Published state` drives UI
@@ -24,6 +35,14 @@ final class RecorderController: ObservableObject {
     @Published private(set) var lastTranscript: String?
     @Published private(set) var lastTransformedTranscript: String?
     @Published private(set) var lastResult: TranscriptionResult?
+
+    /// One-shot informational notice for the next pill cycle. Set by
+    /// `runFlow()` when the active session fell back to the system
+    /// default mic (preferred UID was unresolvable) or recovered partial
+    /// audio after a mid-recording disconnect. `PillViewModel` reads
+    /// this and surfaces a `.notice(...)` after success dismisses, then
+    /// clears it via `consumeFallbackNotice()`.
+    @Published private(set) var lastFallbackNotice: String?
 
     /// The `AudioRecording` that produced `lastResult`, if any. Library's
     /// persister pairs this with `lastResult` to write a SwiftData row +
@@ -84,6 +103,15 @@ final class RecorderController: ObservableObject {
     /// auto-recovery timer.
     func clearError() {
         if case .error = state { state = .idle }
+    }
+
+    /// Read-and-clear accessor for the one-shot fallback notice.
+    /// `PillViewModel` calls this after surfacing the notice so a stale
+    /// message doesn't replay on the next session.
+    func consumeFallbackNotice() -> String? {
+        let notice = lastFallbackNotice
+        if notice != nil { lastFallbackNotice = nil }
+        return notice
     }
 
     /// Drop a recording in progress or cancel Transform. The flow task is
@@ -163,8 +191,27 @@ final class RecorderController: ObservableObject {
             try? await pipeline.ensureTranscriberLoaded()
         }
 
+        // Tracks whether the active session saw a mid-recording
+        // disconnect. The `onDisconnect` closure captures this box
+        // strongly so the `audioTooShort` catch site can upgrade its
+        // error copy when the salvaged audio dropped below the 1 s
+        // transcriber floor.
+        let disconnectFlag = DisconnectFlag()
         do {
-            let token = try await pipeline.startRecording(owner: .recorder)
+            // Hand the pipeline a closure it invokes if the bound mic
+            // drops off mid-recording. We unblock the parked stop
+            // continuation as if the user had hit the hotkey to stop —
+            // `stopAndTranscribe` will read `pipeline.didDisconnect` and
+            // mark the result `partialDueToDisconnect`. Captures self
+            // weakly to avoid a retain cycle.
+            let onDisconnect: @MainActor @Sendable () -> Void = { [weak self, disconnectFlag] in
+                disconnectFlag.set()
+                self?.takeStopContinuation()?.resume()
+            }
+            let token = try await pipeline.startRecording(
+                owner: .recorder,
+                onDisconnect: onDisconnect
+            )
             pipelineToken = token
 
             guard pipeline.stillActive(token) else { return }
@@ -175,12 +222,30 @@ final class RecorderController: ObservableObject {
             guard pipeline.stillActive(token) else { return }
             state = .transcribing
 
-            let (rawText, recording) = try await pipeline.stopAndTranscribe(token)
+            let stopResult = try await pipeline.stopAndTranscribe(token)
+            let rawText = stopResult.text
+            let recording = stopResult.recording
+            let partialDueToDisconnect = stopResult.partialDueToDisconnect
             if pipelineToken == token {
                 pipelineToken = nil
             }
 
             guard pipeline.stillActive(token) else { return }
+
+            // Resolve the user-facing fallback notice once. Two surfaces
+            // can produce a notice:
+            //   * The session fell back to the system default because
+            //     the saved UID was unresolvable (`fallbackInfo.didFallback`).
+            //   * The mic dropped off mid-recording but we recovered
+            //     enough audio to transcribe (`partialDueToDisconnect`).
+            // Mid-record disconnect wins if both fired (it's the more
+            // surprising signal).
+            let fallbackInfo = await pipeline.lastFallbackInfo()
+            let composedNotice: String? = Self.composeFallbackNotice(
+                partialDueToDisconnect: partialDueToDisconnect,
+                recordingDuration: recording.duration,
+                fallbackInfo: fallbackInfo
+            )
 
             let llmConfig = llmConfiguration
             let result = TranscriptionResult(
@@ -212,7 +277,12 @@ final class RecorderController: ObservableObject {
                         guard !Task.isCancelled else { return }
                         self.lastTransformedTranscript = transformed
                         self.lastTranscript = transformed
+                        // Per `docs/plans/mic-disconnect-handling.md`:
+                        // publish metadata BEFORE `lastResult` so
+                        // subscribers (RecordingPersister, SoundTriggers,
+                        // PillViewModel) see a consistent pair.
                         self.lastAudioRecording = recording
+                        self.lastFallbackNotice = composedNotice
                         self.lastResult = result
                         self.noteSuccessfulDelivery(text: transformed)
                         self.state = .idle
@@ -230,6 +300,7 @@ final class RecorderController: ObservableObject {
                         self.lastTransformedTranscript = nil
                         self.lastTranscript = rawText
                         self.lastAudioRecording = recording
+                        self.lastFallbackNotice = composedNotice
                         self.lastResult = result
                         self.noteSuccessfulDelivery(text: rawText)
                         self.state = .idle
@@ -240,6 +311,7 @@ final class RecorderController: ObservableObject {
                 lastTransformedTranscript = nil
                 lastTranscript = rawText
                 lastAudioRecording = recording
+                lastFallbackNotice = composedNotice
                 lastResult = result
                 noteSuccessfulDelivery(text: rawText)
                 state = .idle
@@ -261,7 +333,15 @@ final class RecorderController: ObservableObject {
         } catch VoiceInputPipeline.PipelineError.modelMissing {
             state = .error("Transcription model is still loading — try again in a moment.")
         } catch VoiceInputPipeline.PipelineError.audioTooShort(let recording) {
-            state = .error(shortRecordingMessage(for: recording))
+            // If the recording was cut short by a mid-recording mic
+            // disconnect AND fell below the 1 s transcriber floor, give
+            // the user a more accurate explanation than the generic
+            // short-recording warning.
+            if disconnectFlag.value {
+                state = .error("Mic disconnected mid-recording — too little audio to keep.")
+            } else {
+                state = .error(shortRecordingMessage(for: recording))
+            }
         } catch VoiceInputPipeline.PipelineError.transcribeBusy {
             state = .error("Another transcription is already running.")
         } catch VoiceInputPipeline.PipelineError.transcribeFailed(let error) {
@@ -303,6 +383,27 @@ final class RecorderController: ObservableObject {
         let continuation = stopContinuation
         stopContinuation = nil
         return continuation
+    }
+
+    /// Build the one-line user-facing notice for the next pill cycle.
+    /// Returns `nil` when nothing notable happened. Keeps copy in one
+    /// place so the empty-savedName fallback stays consistent.
+    static func composeFallbackNotice(
+        partialDueToDisconnect: Bool,
+        recordingDuration: TimeInterval,
+        fallbackInfo: AudioCaptureFallbackInfo?
+    ) -> String? {
+        if partialDueToDisconnect {
+            let seconds = max(1, Int(recordingDuration.rounded()))
+            return "Mic disconnected — kept \(seconds)s of audio."
+        }
+        if let info = fallbackInfo, info.didFallback {
+            if !info.savedName.isEmpty {
+                return "Recorded with system default — \(info.savedName) was unavailable."
+            }
+            return "Recorded with system default — your saved mic was unavailable."
+        }
+        return nil
     }
 
     private func transcriptionFailureMessage(for error: Error) -> String {

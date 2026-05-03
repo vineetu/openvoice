@@ -12,6 +12,8 @@ User-facing features in the shipping build. This is the product surface — not 
 - **Any-length recordings** — no hard duration limit; long recordings work reliably.
 - **Live mic input only** — Jot does not transcribe pre-recorded audio files.
 - **Silent-capture detection** — if a recording returns zero-amplitude audio (often a Bluetooth mic that quietly re-routed at the OS level), Jot surfaces an actionable error pointing at the likely culprit instead of returning an empty transcript.
+- **Per-device microphone selection** — pick any connected input device in Settings or the Setup Wizard. Jot remembers your selection across sessions, and the picker keeps a disconnected device visible as "Last used (not connected)" so you don't lose track of it.
+- **Graceful mic disconnect handling** — if your preferred input device disappears, Jot reacts based on what you're doing. **Idle**: silently falls back to the system default for your next recording and surfaces a small notice in the status pill ("Recorded with system default — AirPods Pro was unavailable"). **Mid-dictation**: salvages the audio captured so far rather than dropping the whole take, with a notice noting how many seconds were saved. **Mid-voice-command** (Articulate, Ask Jot voice input): cleanly errors out with a "Mic disconnected — try again" pill, since a partial instruction is worse than none. A 250 ms debounce absorbs Bluetooth flicker.
 
 ## Local Transcription
 
@@ -138,7 +140,7 @@ The main window is the single destination for all five sections — there is no 
 Fields throughout Settings carry per-field `info.circle` popovers for inline help. Each popover's "Learn more →" link deep-links into the matching section of the Help tab.
 
 ### General
-- Input device (microphone) — currently fixed to the macOS Sound settings default; per-device selection is temporarily disabled in this release (known bug, flagged inline in the pane)
+- Input device (microphone) — pick any connected input device; selection is remembered across sessions and the meter restarts so the bars track the newly-bound device. A disconnected preferred device stays visible in the picker as "Last used (not connected)".
 - Launch at login
 - Recording retention — Forever / Last 7 / 30 / 90 days (default: 7 days)
 - Run setup wizard again (preloads current selections)
@@ -213,7 +215,7 @@ Shown on first launch and on demand from Settings → General. Nine steps, in or
 1. **Welcome**
 2. **Permissions** — grant Microphone, Input Monitoring, and Accessibility. A "Restart Jot" button is offered after granting Input Monitoring or Accessibility (a running app can't detect those until it relaunches).
 3. **Model** — downloads Parakeet on first run; already-downloaded models skip straight through.
-4. **Microphone** — review the input device (currently fixed to the macOS Sound settings default; per-device selection is temporarily disabled).
+4. **Microphone** — pick the input device for recording. A live input-level meter under the picker confirms the mic is hot before you continue. A disconnected preferred device stays visible as "Last used (not connected)".
 5. **Shortcuts** — preview of the default Toggle Recording shortcut.
 6. **Test dictation** — speak to verify the full pipeline end-to-end. The user controls the capture window (no hard 3-second cap) and can re-test as many times as they like.
 7. **Done** — terminal "you're set up for the basics" card shown right after Test succeeds. Skip here to start using Jot; Continue advances into the advanced steps below.

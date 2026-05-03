@@ -216,7 +216,36 @@ final class ChatbotVoiceInput: ObservableObject {
             throw VoiceInputError.disabled(.globalRecordingActive)
         }
         do {
-            let token = try await pipeline.startRecording(owner: .articulate)
+            // Mid-recording mic disconnect needs to (a) cancel the
+            // pipeline so its phase resets and the AudioCapture actor
+            // tears down its AUHAL session, (b) resume the parked
+            // `pendingStopContinuation` so the awaiting `capture()`
+            // site doesn't hang waiting for a second tap that will
+            // never come. We surface `disconnectedMidVoiceCommand`
+            // directly to keep the user-visible state in sync with
+            // Articulate's path.
+            let pipelineRef = self.pipeline
+            let onDisconnect: @MainActor @Sendable () -> Void = { [weak self] in
+                guard let self else { return }
+                let token = self.activeToken
+                self.activeToken = nil
+                self.pill?.hideIfCondensing()
+                self.state = .error("Mic disconnected — try again.")
+                if let continuation = self.pendingStopContinuation {
+                    self.pendingStopContinuation = nil
+                    continuation.resume(throwing: VoiceInputPipeline.PipelineError.disconnectedMidVoiceCommand)
+                }
+                // Issue the pipeline cancel asynchronously; we don't
+                // block the main actor on it. If the token already
+                // moved on, `pipeline.cancel(token:)` is a no-op.
+                if let token {
+                    Task { await pipelineRef.cancel(token: token) }
+                }
+            }
+            let token = try await pipeline.startRecording(
+                owner: .articulate,
+                onDisconnect: onDisconnect
+            )
             activeToken = token
             state = .recording
         } catch VoiceInputPipeline.PipelineError.micNotGranted {
@@ -287,6 +316,16 @@ final class ChatbotVoiceInput: ObservableObject {
                 continuation.resume(throwing: CancellationError())
             }
             throw CancellationError()
+        } catch VoiceInputPipeline.PipelineError.disconnectedMidVoiceCommand {
+            condensationTask = nil
+            activeToken = nil
+            pill?.hideIfCondensing()
+            state = .error("Mic disconnected — try again.")
+            if let continuation = pendingStopContinuation {
+                pendingStopContinuation = nil
+                continuation.resume(throwing: VoiceInputPipeline.PipelineError.disconnectedMidVoiceCommand)
+            }
+            throw VoiceInputPipeline.PipelineError.disconnectedMidVoiceCommand
         } catch {
             condensationTask = nil
             activeToken = nil

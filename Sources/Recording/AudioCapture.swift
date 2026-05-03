@@ -24,6 +24,39 @@ public enum AudioCaptureError: Error, Sendable {
         "Audio system isn't responding — see Help → Troubleshooting."
 }
 
+/// Disconnect events emitted by `AudioCapture` while a session is running.
+/// Currently single-case, but enumerated so callers can switch
+/// exhaustively when more sources land (e.g. system route change).
+public enum AudioCaptureDisconnectEvent: Sendable, Equatable {
+    /// `AudioUnitRender` returned a non-zero status while the AUHAL
+    /// callback was active — the bound device dropped off the bus.
+    case renderError(OSStatus)
+    /// `.AVCaptureDeviceWasDisconnected` fired for the UID we are
+    /// currently bound to (debounced 250 ms to ride out Bluetooth
+    /// flicker).
+    case deviceListDropped
+}
+
+/// Surface returned to the controller after a successful
+/// `AudioCapture.stop()` so it can decide whether to surface a
+/// "Recorded with system default — \(savedName) was unavailable."
+/// notice pill.
+public struct AudioCaptureFallbackInfo: Sendable, Equatable {
+    /// The UID the user had selected at `start()` time. Empty if the user
+    /// is on system default.
+    public let savedUID: String
+    /// Cached display name for that UID (`jot.inputDeviceLastName`).
+    /// Empty when the cache is empty AND we couldn't backfill it
+    /// (rare — first session after upgrading from a build that
+    /// pre-dates the cache).
+    public let savedName: String
+    /// Display name of the device we actually recorded from.
+    public let actualDeviceName: String
+    /// True when the saved UID could not be resolved and we fell back
+    /// to the system default. False in normal operation.
+    public let didFallback: Bool
+}
+
 /// Direct CoreAudio AUHAL (`kAudioUnitSubType_HALOutput`) capture path.
 ///
 /// This mirrors `mic-test/variant-4-coreaudio-auhal/Source/Recorder.swift`
@@ -44,9 +77,41 @@ public actor AudioCapture: AudioCapturing {
     private var ctx: CallbackContext?
     private var attempt: SetupAttempt?
     private var cancelRequestedDuringSetup = false
+    /// Captured during `start()` and read by `stop()` so the controller
+    /// can present a "Recorded with system default — \(savedName) was
+    /// unavailable." notice. Reset on every `start()`.
+    private var pendingFallbackInfo: AudioCaptureFallbackInfo?
+    /// Disconnect event plumbing. Built fresh each session; held here
+    /// (actor-isolated) until either the consumer reads via
+    /// `disconnectEvents()` or the session ends. The continuation lives
+    /// on the active `CallbackContext` so the real-time render trampoline
+    /// can yield through a serial GCD queue without touching this actor.
+    private var disconnectStream: AsyncStream<AudioCaptureDisconnectEvent>?
+    private var disconnectContinuation: AsyncStream<AudioCaptureDisconnectEvent>.Continuation?
 
     private let recordingsDirectory: URL
     private let writerQueue = DispatchQueue(label: "com.jot.AudioCapture.writer", qos: .userInitiated)
+    /// Serial queue the real-time AUHAL callback `dispatch_async`es onto when
+    /// it needs to do anything that isn't lock-free atomic work — namely
+    /// yielding a disconnect event onto the AsyncStream continuation. Keeps
+    /// the render trampoline free of allocation / Swift-concurrency.
+    private let disconnectQueue = DispatchQueue(label: "com.jot.AudioCapture.disconnect", qos: .userInitiated)
+    /// `AVCaptureDevice.wasDisconnectedNotification` observer scoped to the
+    /// active session. Belt-and-suspenders for the rare case where AUHAL
+    /// stops delivering callbacks before its render proc reports an error
+    /// (per `docs/plans/mic-disconnect-handling.md` §3). 250 ms debounce
+    /// rides out Bluetooth flicker.
+    private var deviceListObserver: NSObjectProtocol?
+    /// Heap-boxed contexts and render buffers we deliberately leak when
+    /// `boundedAUHALTeardown` times out. The audio thread may still be
+    /// inside the input proc holding a raw `Unmanaged.takeUnretainedValue`
+    /// refcon to a `CallbackContext`; we keep the actor's strong ref
+    /// alive by stashing the box here so the heap allocation isn't
+    /// reclaimed under it. Same idea for the render `AudioBufferList` /
+    /// backing bytes pointers.
+    private var leakedContexts: [CallbackContext] = []
+    private var leakedRenderABLs: [UnsafeMutablePointer<AudioBufferList>] = []
+    private var leakedRenderBytes: [UnsafeMutableRawPointer] = []
     private let outstandingLock = OSAllocatedUnfairLock(initialState: 0)
     private static let outstandingLimit = 64
 
@@ -56,6 +121,34 @@ public actor AudioCapture: AudioCapturing {
 
     public func setAmplitudePublisher(_ publisher: AmplitudePublisher?) {
         amplitudePublisher = publisher
+    }
+
+    /// Hand the controller a stream of disconnect events for the
+    /// currently-running session. Returns an empty (already-finished)
+    /// stream when no session is active so the caller's `for await`
+    /// loop tears down cleanly.
+    ///
+    /// Per `docs/plans/mic-disconnect-handling.md` §3 the stream is
+    /// constructed once per `start()` and the same stream object is
+    /// returned for the duration of that session.
+    public func disconnectEvents() -> AsyncStream<AudioCaptureDisconnectEvent> {
+        if let stream = disconnectStream {
+            return stream
+        }
+        // No active session — hand back an already-finished stream so the
+        // caller's `for await` exits immediately.
+        let (stream, continuation) = AsyncStream<AudioCaptureDisconnectEvent>.makeStream()
+        continuation.finish()
+        return stream
+    }
+
+    /// Snapshot of why the bound device may have changed during the
+    /// just-finished session. Read by `VoiceInputPipeline` /
+    /// `RecorderController` after `stop()` to surface the
+    /// "Recorded with system default" notice. Returns `nil` when no
+    /// session ever ran or when the saved UID resolved cleanly.
+    public func lastFallbackInfo() -> AudioCaptureFallbackInfo? {
+        pendingFallbackInfo
     }
 
     /// `~/Library/Application Support/Jot/Recordings/`. Kept identical to
@@ -82,11 +175,24 @@ public actor AudioCapture: AudioCapturing {
 
         let url = recordingsDirectory.appendingPathComponent("\(UUID().uuidString).wav")
         let selectedUID = UserDefaults.standard.string(forKey: "jot.inputDeviceUID") ?? ""
+        let savedNameCache = UserDefaults.standard.string(forKey: "jot.inputDeviceLastName") ?? ""
         let publisher = amplitudePublisher
         let setupAttempt = SetupAttempt()
         setupAttempt.fileURL = url
         attempt = setupAttempt
         cancelRequestedDuringSetup = false
+        // Reset prior session's fallback info so a stale `didFallback=true`
+        // can't leak into a fresh session.
+        pendingFallbackInfo = nil
+        // Build a fresh disconnect stream for this session. The
+        // continuation is parked on the upcoming `CallbackContext` so
+        // the real-time render trampoline can yield through
+        // `disconnectQueue` without touching this actor.
+        let (newStream, newContinuation) = AsyncStream<AudioCaptureDisconnectEvent>.makeStream(
+            bufferingPolicy: .bufferingNewest(4)
+        )
+        disconnectStream = newStream
+        disconnectContinuation = newContinuation
         defer {
             attempt = nil
             cancelRequestedDuringSetup = false
@@ -97,9 +203,12 @@ public actor AudioCapture: AudioCapturing {
             setup = try await Self.configureAUHALWithTimeout(
                 attempt: setupAttempt,
                 selectedUID: selectedUID,
+                savedNameCache: savedNameCache,
                 url: url,
                 amplitudePublisher: publisher,
                 writerQueue: writerQueue,
+                disconnectQueue: disconnectQueue,
+                disconnectContinuation: newContinuation,
                 outstandingLock: outstandingLock,
                 log: log,
                 seconds: 5
@@ -136,6 +245,26 @@ public actor AudioCapture: AudioCapturing {
         fileURL = setup.fileURL
         startedAt = Date()
         ctx = setup.ctx
+        pendingFallbackInfo = setup.fallbackInfo
+        // Belt-and-suspenders disconnect signal — fires when AVFoundation
+        // surfaces a device-list change for the bound UID before AUHAL's
+        // render proc reports an error. 250 ms debounce inside the
+        // closure rides out Bluetooth flicker. AUHAL render-error fires
+        // are de-duped by `CallbackContext.tryMarkDisconnected` so a
+        // notification fired here while the render path is also winding
+        // down only emits one event total.
+        installDeviceListObserver(boundUID: setup.fallbackInfo.savedUID, context: setup.ctx)
+        // Backfill the cached display name when the live device resolved
+        // cleanly but no name was cached (existing user upgrading from a
+        // build that pre-dates the cache). Defensive — only writes when
+        // we actually have a non-fallback resolution AND the cache is
+        // empty, so we never overwrite a user-edited name.
+        if !setup.fallbackInfo.didFallback,
+           !setup.fallbackInfo.savedUID.isEmpty,
+           savedNameCache.isEmpty,
+           !setup.fallbackInfo.actualDeviceName.isEmpty {
+            UserDefaults.standard.set(setup.fallbackInfo.actualDeviceName, forKey: "jot.inputDeviceLastName")
+        }
     }
 
     public func stop() async throws -> AudioRecording {
@@ -148,10 +277,10 @@ public actor AudioCapture: AudioCapturing {
         }
 
         context.markStopping()
-        AudioOutputUnitStop(activeUnit)
-        AudioUnitUninitialize(activeUnit)
-        AudioComponentInstanceDispose(activeUnit)
-
+        // Snapshot buffered samples *before* AUHAL teardown — per
+        // `docs/plans/mic-disconnect-handling.md` the AUHAL stop calls
+        // can hang on a removed device (rtaudio issue #194). If teardown
+        // wedges, we still hand back whatever the writer queue accepted.
         let captured = writerQueue.sync {
             let snapshot = context.queueState.samples
             context.queueState.audioFile = nil
@@ -160,8 +289,24 @@ public actor AudioCapture: AudioCapturing {
             return snapshot
         }
 
-        freeRenderBuffers()
-        resetState()
+        let outcome = AudioCapture.boundedAUHALTeardown(
+            unit: activeUnit,
+            timeout: 2,
+            log: log,
+            site: "stop"
+        )
+
+        // On timeout the render trampoline may still touch
+        // `renderABL` / `ctx` if dispose eventually returns. Skip the
+        // dealloc + ctx clear in that case to avoid a use-after-free —
+        // see `docs/plans/mic-disconnect-handling.md`.
+        finishDisconnectStream()
+        if outcome == .completed {
+            freeRenderBuffers()
+            resetState()
+        } else {
+            resetStateAfterLeak()
+        }
 
         let publisher = amplitudePublisher
         Task { @MainActor [weak publisher] in
@@ -182,6 +327,7 @@ public actor AudioCapture: AudioCapturing {
             if let url = attempt?.fileURL {
                 try? FileManager.default.removeItem(at: url)
             }
+            finishDisconnectStream()
             let publisher = amplitudePublisher
             Task { @MainActor [weak publisher] in
                 publisher?.reset()
@@ -189,14 +335,10 @@ public actor AudioCapture: AudioCapturing {
             return
         }
 
-        if let activeUnit = unit {
-            ctx?.markStopping()
-            AudioOutputUnitStop(activeUnit)
-            AudioUnitUninitialize(activeUnit)
-            AudioComponentInstanceDispose(activeUnit)
-        }
-
+        ctx?.markStopping()
         if let context = ctx {
+            // Drain the writer queue first so any buffered work releases
+            // its references before the unit is disposed (mirrors `stop()`).
             writerQueue.sync {
                 context.queueState.audioFile = nil
                 context.queueState.converter = nil
@@ -204,12 +346,27 @@ public actor AudioCapture: AudioCapturing {
             }
         }
 
+        var outcome: TeardownOutcome = .completed
+        if let activeUnit = unit {
+            outcome = AudioCapture.boundedAUHALTeardown(
+                unit: activeUnit,
+                timeout: 2,
+                log: log,
+                site: "cancel"
+            )
+        }
+
         if let url = fileURL {
             try? FileManager.default.removeItem(at: url)
         }
 
-        freeRenderBuffers()
-        resetState()
+        finishDisconnectStream()
+        if outcome == .completed {
+            freeRenderBuffers()
+            resetState()
+        } else {
+            resetStateAfterLeak()
+        }
 
         let publisher = amplitudePublisher
         Task { @MainActor [weak publisher] in
@@ -219,19 +376,159 @@ public actor AudioCapture: AudioCapturing {
 
     private func disposeCommittedSetup(_ setup: AUHALSetup, deleteFile: Bool) {
         setup.ctx.markStopping()
-        AudioOutputUnitStop(setup.unit)
-        AudioUnitUninitialize(setup.unit)
-        AudioComponentInstanceDispose(setup.unit)
         writerQueue.sync {
             setup.ctx.queueState.audioFile = nil
             setup.ctx.queueState.converter = nil
             setup.ctx.queueState.samples.removeAll(keepingCapacity: false)
         }
-        setup.renderABL.deallocate()
-        setup.renderBytes.deallocate()
+        let outcome = AudioCapture.boundedAUHALTeardown(
+            unit: setup.unit,
+            timeout: 2,
+            log: log,
+            site: "disposeCommittedSetup"
+        )
+        if outcome == .completed {
+            setup.renderABL.deallocate()
+            setup.renderBytes.deallocate()
+        } else {
+            // Teardown timed out — retain ctx + buffers so the audio
+            // thread's unretained refcon stays valid until it actually
+            // returns. Bounded leak per `docs/plans/mic-disconnect-handling.md`.
+            leakedContexts.append(setup.ctx)
+            leakedRenderABLs.append(setup.renderABL)
+            leakedRenderBytes.append(setup.renderBytes)
+        }
         if deleteFile {
             try? FileManager.default.removeItem(at: setup.fileURL)
         }
+    }
+
+    private func finishDisconnectStream() {
+        disconnectContinuation?.finish()
+        disconnectContinuation = nil
+        disconnectStream = nil
+        if let observer = deviceListObserver {
+            NotificationCenter.default.removeObserver(observer)
+            deviceListObserver = nil
+        }
+    }
+
+    /// Subscribe to `AVCaptureDevice.wasDisconnectedNotification` so a
+    /// device-removal that AUHAL hasn't surfaced yet still tears down
+    /// gracefully. Skips when the bound device is system-default
+    /// (`boundUID` is empty) since system-default fallback is handled
+    /// transparently.
+    private func installDeviceListObserver(boundUID: String, context: CallbackContext) {
+        guard !boundUID.isEmpty else { return }
+        // The notification posts on the main queue per AVFoundation;
+        // capture the disconnect queue so the firing closure stays off
+        // the main actor.
+        let disconnectQueue = self.disconnectQueue
+        // Note: stored as a NSObjectProtocol — fine to remove from any
+        // thread in `finishDisconnectStream`.
+        deviceListObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name.AVCaptureDeviceWasDisconnected,
+            object: nil,
+            queue: nil
+        ) { notification in
+            guard let device = notification.object as? AVCaptureDevice,
+                  device.uniqueID == boundUID
+            else { return }
+            // 250 ms debounce — Bluetooth (AirPods especially) emits a
+            // brief disconnect/reconnect during route changes that
+            // shouldn't kill an in-progress recording. Re-check the
+            // device list at the end of the debounce window; if the
+            // device is back, drop the event.
+            disconnectQueue.asyncAfter(deadline: .now() + .milliseconds(250)) {
+                let stillMissing = AudioCapture.audioDeviceID(forUID: boundUID) == nil
+                guard stillMissing else { return }
+                guard context.tryMarkDisconnected() else { return }
+                let continuation = context.disconnectContinuation
+                continuation.yield(.deviceListDropped)
+                continuation.finish()
+                Task {
+                    await ErrorLog.shared.error(
+                        component: "AudioCapture",
+                        message: "AVCaptureDeviceWasDisconnected for bound UID — emitting disconnect",
+                        context: ["uid": boundUID]
+                    )
+                }
+            }
+        }
+    }
+
+    /// Wraps the three AUHAL teardown calls in a 2-second bounded
+    /// background dispatch. On timeout the unit pointer is intentionally
+    /// leaked — better than wedging the @MainActor caller.
+    /// `nonisolated` so it can be reused from `SetupAttempt.dispose()`
+    /// (an `@unchecked Sendable` class outside the actor) and the
+    /// wizard-meter teardown.
+    /// Result of a bounded AUHAL teardown attempt. Callers use this to
+    /// decide whether it is safe to free the heap-boxed `CallbackContext`
+    /// and `AudioBufferList` (the AUHAL real-time callback may still be
+    /// firing if the dispose call hung).
+    enum TeardownOutcome: Sendable {
+        case completed
+        /// 2-second timeout fired before teardown returned. The caller
+        /// MUST NOT deallocate render buffers or release the
+        /// `CallbackContext` — the audio thread may still touch them
+        /// when (or if) `AudioComponentInstanceDispose` eventually
+        /// returns. We accept the leak; the alternative is a use-after-
+        /// free crash. Per `docs/plans/mic-disconnect-handling.md`.
+        case timedOut
+    }
+
+    @discardableResult
+    static func boundedAUHALTeardown(
+        unit: AudioUnit,
+        timeout: TimeInterval,
+        log: Logger,
+        site: String
+    ) -> TeardownOutcome {
+        // `AudioUnit` is `UnsafeMutablePointer<ComponentInstanceRecord>`,
+        // which is not `Sendable`. Wrap in an `@unchecked Sendable` box so
+        // the dispatched closure can carry it across the queue. Safe
+        // because the unit is only touched on this background thread for
+        // the duration of teardown.
+        struct UnitBox: @unchecked Sendable { let unit: AudioUnit }
+        let box = UnitBox(unit: unit)
+        let lock = OSAllocatedUnfairLock(initialState: false)
+        let semaphore = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async {
+            AudioOutputUnitStop(box.unit)
+            AudioUnitUninitialize(box.unit)
+            AudioComponentInstanceDispose(box.unit)
+            let isLate = lock.withLock { resumed in
+                let was = resumed
+                resumed = true
+                return was
+            }
+            if !isLate {
+                semaphore.signal()
+            }
+        }
+        let timeoutResult = semaphore.wait(timeout: .now() + timeout)
+        if timeoutResult == .timedOut {
+            let alreadyResumed = lock.withLock { resumed -> Bool in
+                let was = resumed
+                resumed = true
+                return was
+            }
+            if !alreadyResumed {
+                log.error("AUHAL teardown timed out at \(site, privacy: .public) — leaking AudioUnit + buffers")
+                Task {
+                    await ErrorLog.shared.error(
+                        component: "AudioCapture",
+                        message: "AUHAL teardown timed out — leaking unit and buffers",
+                        context: ["site": site]
+                    )
+                }
+                return .timedOut
+            }
+            // Else: background block beat us to the resume — clean exit.
+            return .completed
+        }
+        return .completed
     }
 
     private func freeRenderBuffers() {
@@ -240,6 +537,36 @@ public actor AudioCapture: AudioCapturing {
     }
 
     private func resetState() {
+        unit = nil
+        renderABL = nil
+        renderBytes = nil
+        maxFrames = 0
+        fileURL = nil
+        startedAt = nil
+        ctx = nil
+    }
+
+    /// Same as `resetState` but intentionally LEAKS `renderABL`,
+    /// `renderBytes`, and `ctx` — the bounded AUHAL teardown timed out
+    /// so the audio thread may still touch them when (or if) dispose
+    /// eventually returns. See `docs/plans/mic-disconnect-handling.md`.
+    /// Next `start()` allocates a fresh `CallbackContext` and buffers,
+    /// so the leak is bounded to one-per-hung-disconnect.
+    private func resetStateAfterLeak() {
+        // Stash the live references in the leak arrays so the heap
+        // allocations stay alive even though the per-session slots get
+        // cleared. The audio thread holds raw `Unmanaged` pointers; if
+        // we just `ctx = nil` here the strong ref drops to 0 and the
+        // CallbackContext deallocates under the still-running callback.
+        if let liveCtx = ctx {
+            leakedContexts.append(liveCtx)
+        }
+        if let liveABL = renderABL {
+            leakedRenderABLs.append(liveABL)
+        }
+        if let liveBytes = renderBytes {
+            leakedRenderBytes.append(liveBytes)
+        }
         unit = nil
         renderABL = nil
         renderBytes = nil
@@ -258,14 +585,18 @@ public actor AudioCapture: AudioCapturing {
         let maxFrames: UInt32
         let fileURL: URL
         let ctx: CallbackContext
+        let fallbackInfo: AudioCaptureFallbackInfo
     }
 
     private static func configureAUHALWithTimeout(
         attempt: SetupAttempt,
         selectedUID: String,
+        savedNameCache: String,
         url: URL,
         amplitudePublisher: AmplitudePublisher?,
         writerQueue: DispatchQueue,
+        disconnectQueue: DispatchQueue,
+        disconnectContinuation: AsyncStream<AudioCaptureDisconnectEvent>.Continuation,
         outstandingLock: OSAllocatedUnfairLock<Int>,
         log: Logger,
         seconds: Double
@@ -332,14 +663,23 @@ public actor AudioCapture: AudioCapturing {
                 }
 
                 // 3. Resolve and bind the device.
+                //
+                // Note: the picker stores `AVCaptureDevice.uniqueID` while
+                // CoreAudio resolves against `kAudioDevicePropertyDeviceUID`.
+                // These are documented as separate APIs but produce identical
+                // strings in practice on macOS — this is the standard
+                // AVFoundation⇄CoreAudio bridge pattern. Verified
+                // empirically by the picker test under commit `92605be`.
                 var devID: AudioDeviceID = 0
+                var didFallback = false
                 if !selectedUID.isEmpty {
                     if let resolved = Self.audioDeviceID(forUID: selectedUID) {
                         devID = resolved
                         log.info("Resolved UID \(selectedUID, privacy: .public) → AudioDeviceID=\(devID, privacy: .public)")
                     } else {
-                        log.error("Could not resolve UID \(selectedUID, privacy: .public); falling back to system default")
+                        log.warning("Could not resolve UID \(selectedUID, privacy: .public); falling back to system default")
                         devID = Self.systemDefaultInputDevice() ?? 0
+                        didFallback = true
                     }
                 } else {
                     devID = Self.systemDefaultInputDevice() ?? 0
@@ -366,6 +706,7 @@ public actor AudioCapture: AudioCapturing {
                        fallbackID != devID {
                         log.warning("CurrentDevice set failed for selected UID; falling back to system default: \(status, privacy: .public)")
                         devID = fallbackID
+                        didFallback = true
                         status = AudioUnitSetProperty(
                             u,
                             kAudioOutputUnitProperty_CurrentDevice,
@@ -381,6 +722,7 @@ public actor AudioCapture: AudioCapturing {
                         return
                     }
                 }
+                let actualDeviceName = Self.stringProperty(devID, selector: kAudioObjectPropertyName) ?? ""
 
                 // 4. Read the device's native ASBD on input scope, element 1.
                 var deviceASBD = AudioStreamBasicDescription()
@@ -515,6 +857,8 @@ public actor AudioCapture: AudioCapturing {
                     avFormat: avFmt,
                     amplitudePublisher: amplitudePublisher,
                     writerQueue: writerQueue,
+                    disconnectQueue: disconnectQueue,
+                    disconnectContinuation: disconnectContinuation,
                     outstandingLock: outstandingLock,
                     outstandingLimit: Self.outstandingLimit,
                     log: log,
@@ -556,13 +900,20 @@ public actor AudioCapture: AudioCapturing {
                     return
                 }
 
+                let fallbackInfo = AudioCaptureFallbackInfo(
+                    savedUID: selectedUID,
+                    savedName: savedNameCache,
+                    actualDeviceName: actualDeviceName,
+                    didFallback: didFallback
+                )
                 let setup = AUHALSetup(
                     unit: u,
                     renderABL: abl,
                     renderBytes: bytes,
                     maxFrames: chosenMaxFrames,
                     fileURL: url,
-                    ctx: context
+                    ctx: context,
+                    fallbackInfo: fallbackInfo
                 )
 
                 if attempt.tryCommit() {
@@ -672,12 +1023,25 @@ fileprivate final class CallbackContext: @unchecked Sendable {
     let avFormat: AVAudioFormat
     weak var amplitudePublisher: AmplitudePublisher?
     let writerQueue: DispatchQueue
+    /// Serial queue the real-time render trampoline `dispatch_async`es to
+    /// when it needs to do non-realtime work (yielding the disconnect
+    /// event). Keeps the audio thread out of Swift concurrency.
+    let disconnectQueue: DispatchQueue
+    /// Continuation for the disconnect AsyncStream the actor handed out.
+    /// Invoked once via `disconnectQueue` on the first render error;
+    /// subsequent errors are de-duped via `disconnectFlag`. Marked as
+    /// non-actor-isolated so it can be touched from the real-time
+    /// callback under the lock.
+    let disconnectContinuation: AsyncStream<AudioCaptureDisconnectEvent>.Continuation
     let outstandingLock: OSAllocatedUnfairLock<Int>
     let outstandingLimit: Int
     let log: Logger
     let queueState: QueueState
     private let stopLock = OSAllocatedUnfairLock(initialState: false)
     private let droppedLock = OSAllocatedUnfairLock(initialState: 0)
+    /// One-shot flag — only the first AudioUnitRender error per session
+    /// fires a disconnect event. Compare-and-set under `disconnectLock`.
+    private let disconnectLock = OSAllocatedUnfairLock(initialState: false)
 
     init(
         unit: AudioUnit,
@@ -687,6 +1051,8 @@ fileprivate final class CallbackContext: @unchecked Sendable {
         avFormat: AVAudioFormat,
         amplitudePublisher: AmplitudePublisher?,
         writerQueue: DispatchQueue,
+        disconnectQueue: DispatchQueue,
+        disconnectContinuation: AsyncStream<AudioCaptureDisconnectEvent>.Continuation,
         outstandingLock: OSAllocatedUnfairLock<Int>,
         outstandingLimit: Int,
         log: Logger,
@@ -699,6 +1065,8 @@ fileprivate final class CallbackContext: @unchecked Sendable {
         self.avFormat = avFormat
         self.amplitudePublisher = amplitudePublisher
         self.writerQueue = writerQueue
+        self.disconnectQueue = disconnectQueue
+        self.disconnectContinuation = disconnectContinuation
         self.outstandingLock = outstandingLock
         self.outstandingLimit = outstandingLimit
         self.log = log
@@ -717,6 +1085,17 @@ fileprivate final class CallbackContext: @unchecked Sendable {
         droppedLock.withLock {
             $0 += 1
             return $0
+        }
+    }
+
+    /// Compare-and-set the disconnect flag. Returns true on the first call
+    /// per session — subsequent calls return false so the caller fires
+    /// the event exactly once.
+    func tryMarkDisconnected() -> Bool {
+        disconnectLock.withLock { fired in
+            guard !fired else { return false }
+            fired = true
+            return true
         }
     }
 }
@@ -752,12 +1131,12 @@ fileprivate final class SetupAttempt: @unchecked Sendable {
 
     func dispose(writerQueue: DispatchQueue) {
         ctx?.markStopping()
-        if let activeUnit = unit {
-            AudioOutputUnitStop(activeUnit)
-            AudioUnitUninitialize(activeUnit)
-            AudioComponentInstanceDispose(activeUnit)
-            unit = nil
-        }
+        // Drain the writer queue first so a hung unit teardown can't
+        // strand outstanding writes — mirrors `AudioCapture.cancel()`.
+        // Hold a local strong ref to the context so a timeout-leak path
+        // can stash it in the global registry before the local goes
+        // out of scope.
+        let retainedCtx = ctx
         if let context = ctx {
             writerQueue.sync {
                 context.queueState.audioFile = nil
@@ -768,14 +1147,63 @@ fileprivate final class SetupAttempt: @unchecked Sendable {
         } else {
             writerQueue.sync {}
         }
-        renderABL?.deallocate()
-        renderABL = nil
-        renderBytes?.deallocate()
-        renderBytes = nil
+        var outcome: AudioCapture.TeardownOutcome = .completed
+        if let activeUnit = unit {
+            // 2-second bounded teardown — see `docs/plans/mic-disconnect-handling.md`.
+            outcome = AudioCapture.boundedAUHALTeardown(
+                unit: activeUnit,
+                timeout: 2,
+                log: Logger(subsystem: "com.jot.Jot", category: "AudioCapture.SetupAttempt"),
+                site: "SetupAttempt.dispose"
+            )
+            unit = nil
+        }
+        if outcome == .completed {
+            renderABL?.deallocate()
+            renderABL = nil
+            renderBytes?.deallocate()
+            renderBytes = nil
+        } else {
+            // Teardown timed out — retain ctx + buffers in the
+            // process-wide leak registry so a late-resuming dispose
+            // doesn't dereference a freed refcon. Bounded to one entry
+            // per coreaudiod hang.
+            if let retainedCtx { AudioCaptureLeakRegistry.shared.retain(ctx: retainedCtx) }
+            if let abl = renderABL { AudioCaptureLeakRegistry.shared.retain(renderABL: abl) }
+            if let bytes = renderBytes { AudioCaptureLeakRegistry.shared.retain(renderBytes: bytes) }
+            renderABL = nil
+            renderBytes = nil
+        }
         if let url = fileURL {
             try? FileManager.default.removeItem(at: url)
             fileURL = nil
         }
+    }
+}
+
+/// Process-wide retainer for `CallbackContext`s and render buffers we
+/// could not safely deallocate from `SetupAttempt.dispose` (no actor
+/// instance to stash them on). Keeps the heap allocations alive past a
+/// hung AUHAL teardown so the audio thread's unretained refcon doesn't
+/// dangle. Bounded to one entry per coreaudiod hang in practice.
+fileprivate final class AudioCaptureLeakRegistry: @unchecked Sendable {
+    static let shared = AudioCaptureLeakRegistry()
+    private let lock = NSLock()
+    private var contexts: [CallbackContext] = []
+    private var renderABLs: [UnsafeMutablePointer<AudioBufferList>] = []
+    private var renderBytes: [UnsafeMutableRawPointer] = []
+
+    func retain(ctx: CallbackContext) {
+        lock.lock(); defer { lock.unlock() }
+        contexts.append(ctx)
+    }
+    func retain(renderABL: UnsafeMutablePointer<AudioBufferList>) {
+        lock.lock(); defer { lock.unlock() }
+        renderABLs.append(renderABL)
+    }
+    func retain(renderBytes: UnsafeMutableRawPointer) {
+        lock.lock(); defer { lock.unlock() }
+        self.renderBytes.append(renderBytes)
     }
 }
 
@@ -810,8 +1238,31 @@ private func audioCaptureAUHALInputCallback(
         ctx.renderABL
     )
     if renderStatus != noErr {
-        ctx.log.error("AudioUnitRender failed: \(renderStatus, privacy: .public)")
-        Task { await ErrorLog.shared.error(component: "AudioCapture", message: "AudioUnitRender failed", context: ["status": "\(renderStatus)"]) }
+        // Treat any non-zero render status as a possible mid-recording
+        // disconnect (USB pull, AirPods drop, sleep/wake). Lock-free
+        // compare-and-set guarantees a single fire per session; the
+        // expensive work — yielding the event onto the AsyncStream and
+        // logging — happens off the real-time thread via
+        // `disconnectQueue` per `docs/plans/mic-disconnect-handling.md`
+        // §3 (no allocation / Swift concurrency / logging on the audio
+        // thread).
+        if ctx.tryMarkDisconnected() {
+            let continuation = ctx.disconnectContinuation
+            let status = renderStatus
+            let log = ctx.log
+            ctx.disconnectQueue.async {
+                log.error("AudioUnitRender failed: \(status, privacy: .public)")
+                continuation.yield(.renderError(status))
+                continuation.finish()
+                Task {
+                    await ErrorLog.shared.error(
+                        component: "AudioCapture",
+                        message: "AudioUnitRender failed — emitting disconnect",
+                        context: ["status": "\(status)"]
+                    )
+                }
+            }
+        }
         return renderStatus
     }
 

@@ -61,6 +61,10 @@ struct PillView: View {
                 pillBody {
                     SuccessContent(preview: preview)
                 }
+            case .notice(let message):
+                pillBody {
+                    NoticeContent(message: message)
+                }
             case .error(let message):
                 pillBody {
                     ErrorContent(message: message)
@@ -378,6 +382,37 @@ private struct SuccessContent: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .transition(.opacity.animation(.easeOut(duration: 0.14)))
+    }
+}
+
+// MARK: - Notice (informational, non-failure)
+
+/// Rendered for `PillState.notice`. Visual chrome is intentionally distinct
+/// from `.error`: an `info.circle.fill` glyph in `.secondaryLabel` (not red)
+/// so a fallback like "Recorded with system default — AirPods Pro 2 was
+/// unavailable." reads as info, not failure.
+private struct NoticeContent: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "info.circle.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+            Text(displayMessage)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: PillView.errorTextMaxWidth, alignment: .leading)
+        }
+        .transition(.opacity.animation(.easeOut(duration: 0.14)))
+    }
+
+    private var displayMessage: String {
+        message
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

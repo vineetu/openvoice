@@ -29,4 +29,28 @@ protocol AudioCapturing: Sendable {
     /// Hand the seam a publisher to receive ~10 Hz RMS amplitude values
     /// during recording. Pass `nil` to detach.
     func setAmplitudePublisher(_ publisher: AmplitudePublisher?) async
+
+    /// Stream of mid-recording disconnect events for the active session.
+    /// Returns an already-finished stream when no session is running so
+    /// the caller's `for await` loop terminates cleanly.
+    /// See `docs/plans/mic-disconnect-handling.md`.
+    func disconnectEvents() async -> AsyncStream<AudioCaptureDisconnectEvent>
+
+    /// Snapshot of why the bound device may have changed during the
+    /// just-finished session — used to surface the
+    /// "Recorded with system default" notice. `nil` when no session has
+    /// run yet or the saved UID resolved cleanly.
+    func lastFallbackInfo() async -> AudioCaptureFallbackInfo?
+}
+
+/// Default no-op implementations so the test harness `AudioCapturing`
+/// conformer keeps building without each test fixture re-stubbing these.
+extension AudioCapturing {
+    func disconnectEvents() async -> AsyncStream<AudioCaptureDisconnectEvent> {
+        let (stream, continuation) = AsyncStream<AudioCaptureDisconnectEvent>.makeStream()
+        continuation.finish()
+        return stream
+    }
+
+    func lastFallbackInfo() async -> AudioCaptureFallbackInfo? { nil }
 }

@@ -7,6 +7,14 @@ import SwiftUI
 
 struct GeneralPane: View {
     @AppStorage("jot.inputDeviceUID") private var inputDeviceUID: String = ""
+    /// Cached human-readable name for the saved UID. Populated when the
+    /// user selects a device from the picker and read by the
+    /// `AudioCapture` fallback path so the "Recorded with system default
+    /// — \(savedName) was unavailable." notice can name the missing
+    /// device. Empty string when the user is on system default or when
+    /// the cache hasn't been populated yet (existing user upgrading;
+    /// `AudioCapture.start()` opportunistically backfills).
+    @AppStorage("jot.inputDeviceLastName") private var inputDeviceLastName: String = ""
     @AppStorage("jot.retentionDays") private var retentionDays: Int = 7
 
     // Injected at the root scene in `JotApp.swift` so the "Run Setup Wizard…"
@@ -71,6 +79,16 @@ struct GeneralPane: View {
                     }
                 }
                 .pickerStyle(.menu)
+                // Cache the device's display name on selection so a
+                // future fallback notice can read it even after the
+                // device is disconnected.
+                .onChange(of: inputDeviceUID) { _, newValue in
+                    if newValue.isEmpty {
+                        inputDeviceLastName = ""
+                    } else if let device = deviceWatcher.devices.first(where: { $0.uniqueID == newValue }) {
+                        inputDeviceLastName = device.localizedName
+                    }
+                }
             }
 
             Section {

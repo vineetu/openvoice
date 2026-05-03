@@ -11,7 +11,7 @@ import os.log
 /// app from every AppKit surface — unfriendly when the app ever wedged,
 /// since users couldn't Force Quit it through normal channels.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private let log = Logger(subsystem: "com.jot.Jot", category: "AppDelegate")
     private let singleInstance = SingleInstance()
 
@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// must exist before the first `WindowGroup` body runs — assigning
     /// `services` at the start of `applicationDidFinishLaunching`
     /// satisfies that.
-    private(set) var services: AppServices!
+    @Published private(set) var services: AppServices!
 
     /// Bridge between RecorderController's `$lastResult` and
     /// DeliveryService.deliver(...). Held strongly so the sink outlives

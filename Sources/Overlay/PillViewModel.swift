@@ -19,6 +19,12 @@ final class PillViewModel: ObservableObject {
         case rewriting
         case transforming
         case success(preview: String)
+        /// Informational toast (e.g. "Recorded with system default — \(savedName)
+        /// was unavailable.") — surfaces successful recording with a caveat the
+        /// user should know about. Distinct from `.error` so a benign fallback
+        /// doesn't read as a failure. Auto-dismisses on the same cadence as
+        /// `.success`. See `docs/plans/mic-disconnect-handling.md`.
+        case notice(message: String)
         case error(message: String)
     }
 
@@ -39,6 +45,10 @@ final class PillViewModel: ObservableObject {
     private var deliveryCancellable: AnyCancellable?
     private var articulateCancellable: AnyCancellable?
     private var articulateResultCancellable: AnyCancellable?
+    /// Subscription that surfaces `RecorderController.lastFallbackNotice`
+    /// as a `.notice(...)` pill once a fresh `lastResult` has landed and
+    /// the success pill has dismissed. See `docs/plans/mic-disconnect-handling.md`.
+    private var fallbackNoticeCancellable: AnyCancellable?
 
     private weak var recorder: RecorderController?
     private weak var delivery: DeliveryService?
@@ -60,6 +70,27 @@ final class PillViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
                 self?.deliveryEvent(event)
+            }
+
+        // Notice pill surfaces after delivery — subscribe to the trigger
+        // publisher (`lastResult`) and read the companion
+        // `lastFallbackNotice` synchronously off `recorder`. Per the
+        // documented sequencing, `lastFallbackNotice` is set BEFORE
+        // `lastResult` so the read here is consistent.
+        fallbackNoticeCancellable = recorder.$lastResult
+            .compactMap { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak recorder] _ in
+                guard let self, let recorder else { return }
+                guard let notice = recorder.consumeFallbackNotice() else { return }
+                // Defer slightly so the success pill can register its
+                // dismiss timer before we replace the state. Without
+                // this, the notice would steal the linger on a fresh
+                // success.
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(Self.successLinger * 1_000_000_000))
+                    self?.showNotice(notice)
+                }
             }
 
         if let articulateController {
@@ -110,10 +141,10 @@ final class PillViewModel: ObservableObject {
         case .idle:
             // Don't immediately clear — the recorder hops through .idle on its
             // way to delivering a transcript. If we're currently showing
-            // success/error, leave that alone. If we're in recording or
+            // success/error/notice, leave that alone. If we're in recording or
             // transcribing, hide (e.g. a cancel).
             switch self.state {
-            case .success, .error, .hidden, .rewriting, .condensing:
+            case .success, .error, .notice, .hidden, .rewriting, .condensing:
                 break
             case .recording, .transcribing, .transforming:
                 transition(to: .hidden)
@@ -141,7 +172,7 @@ final class PillViewModel: ObservableObject {
         switch articulateState {
         case .idle:
             switch self.state {
-            case .success, .error, .hidden, .condensing:
+            case .success, .error, .notice, .hidden, .condensing:
                 break
             case .recording, .transcribing, .rewriting, .transforming:
                 transition(to: .hidden)
@@ -248,6 +279,22 @@ final class PillViewModel: ObservableObject {
             scheduleDismiss(after: Self.successLinger)
             return
         }
+    }
+
+    // MARK: - Notice (informational, non-failure)
+
+    /// Surface a short informational pill (e.g. "Recorded with system default —
+    /// \(savedName) was unavailable."). Yields to an in-flight error so a real
+    /// failure isn't masked, but otherwise replaces success/notice/idle. The
+    /// `RecorderController.lastFallbackNotice` flow chains this after the
+    /// success pill has dismissed.
+    func showNotice(_ message: String) {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if case .error = state { return }
+        stopTick()
+        transition(to: .notice(message: trimmed))
+        scheduleDismiss(after: Self.successLinger)
     }
 
     /// Format a duration as `mm:ss` — caps at `99:59`, which is fine because

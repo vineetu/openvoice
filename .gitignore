@@ -73,3 +73,6 @@ docs/sony-announce.md
 
 # Mic-capture sandbox apps — local debugging only, never committed.
 mic-test/
+
+# Streaming-vs-batch Parakeet sandbox — local debugging only, never committed.
+streaming-test/

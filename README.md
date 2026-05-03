@@ -28,7 +28,7 @@ To configure Articulate or transcript cleanup, go to **Settings → AI**, pick y
 
 ## Stack
 
-Swift · SwiftUI + AppKit · FluidAudio (Parakeet TDT 0.6B v3 on Apple Neural Engine) · AVAudioEngine · SwiftData · KeyboardShortcuts
+Swift · SwiftUI + AppKit · FluidAudio (Parakeet TDT 0.6B v3 on Apple Neural Engine) · CoreAudio AUHAL · SwiftData · KeyboardShortcuts
 
 ## Requirements
 

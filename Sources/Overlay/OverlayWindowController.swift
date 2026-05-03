@@ -142,6 +142,11 @@ final class OverlayWindowController {
         switch state {
         case .error(let message):
             return errorPillWidth(for: message)
+        case .notice(let message):
+            // Notices use the same text-driven sizing as `.error` so a long
+            // fallback message ("Recorded with system default — \(savedName)
+            // was unavailable.") doesn't truncate to ellipsis.
+            return errorPillWidth(for: message)
         case .hidden, .recording, .transcribing, .condensing, .rewriting, .transforming, .success:
             return Self.compactPillWidth
         }
@@ -164,7 +169,8 @@ final class OverlayWindowController {
     private func applyClickThrough(for state: PillViewModel.PillState) {
         guard let panel else { return }
         switch state {
-        case .hidden, .recording, .transcribing, .condensing, .rewriting, .transforming:
+        case .hidden, .recording, .transcribing, .condensing, .rewriting, .transforming, .notice:
+            // Notices are pure informational — no copy glyph or follow-up.
             panel.ignoresMouseEvents = true
         case .success, .error:
             panel.ignoresMouseEvents = false
