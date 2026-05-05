@@ -114,6 +114,14 @@ struct AskJotView: View {
                 .controlSize(.small)
                 .keyboardShortcut("n", modifiers: [.command])
                 .accessibilityHint("Clears the conversation and starts fresh.")
+
+                Button("Clear chat") {
+                    handleNewChatAction()
+                }
+                .keyboardShortcut("k", modifiers: [.command])
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
             }
         }
     }

@@ -18,8 +18,11 @@ User-facing features in the shipping build. This is the product surface — not 
 ## Local Transcription
 
 - **On-device only** — audio is transcribed locally on the Apple Neural Engine; it never leaves the Mac.
-- **Parakeet TDT 0.6B v3** — ships as the transcription engine, running via FluidAudio on the ANE.
-- **In-app model download** — the model is fetched from within Jot on first use with a progress bar.
+- **Multiple model options** — pick the transcription engine in Settings → Transcription or the Setup Wizard. All run via FluidAudio on the ANE; switching is non-destructive (other models stay installed unless you delete them):
+  - **Parakeet TDT 0.6B v3 (multilingual)** — default; broad language coverage. ≈1.25 GB.
+  - **Parakeet 0.6B Japanese** — single-language alternative tuned for Japanese-first users. ≈1.25 GB.
+  - **Parakeet 0.6B v2 (English, live preview)** — *Experimental.* Pairs the English-only TDT v2 batch transcriber with the Parakeet EOU 120M streaming engine so partial words appear in the recording pill as you speak. The batch transcript remains the authoritative output; streaming text is informational. ≈0.72 GB total across both bundles.
+- **In-app model download** — each model is fetched from within Jot on first use with a progress bar.
 
 ## Transcript Cleanup (optional)
 
@@ -43,12 +46,12 @@ Transform selected text via a global shortcut. Two variants, both triggered by t
 - **Select text anywhere → press the shortcut → speak an instruction** ("make this more formal", "fix the grammar", "translate to Spanish", "convert to bulleted list"). The rewritten text replaces the selection.
 - **Intent-classified prompting** — a deterministic regex classifier routes each instruction into one of four branches (voice-preserving / structural / translation / code) and selects a specialized tendency for the LLM. The user's spoken instruction is always the primary signal; the branch just picks a minimal default tendency. Net effect: "make this a bulleted list" or "translate to Japanese" actually produce the requested shape, not a length-matched paraphrase.
 - **Cancellable** — `Esc` cancels the capture, transcription, or rewriting phase without committing.
-- **Unbound by default** — the user assigns a shortcut in Settings → Shortcuts.
+- **Default `⌥.`** — rebindable in Settings → Shortcuts.
 
 ### Rewrite — no voice
 - **Select text → press the shortcut.** No dictation step. Jot sends the selection to the configured LLM with the fixed instruction `"Rewrite this"` and the result replaces the selection.
 - **One-hand quick cleanup** — use when you just want the LLM to tidy a passage without speaking an instruction.
-- **Unbound by default** — the user assigns a shortcut in Settings → Shortcuts.
+- **Default `⌥/`** — rebindable in Settings → Shortcuts.
 
 ### Shared configuration
 - **Provider options** — Apple Intelligence (on-device, default on macOS 26+), OpenAI, Anthropic, Gemini, or Ollama.
@@ -80,10 +83,10 @@ All shortcuts are bindable in the Shortcuts pane. Defaults and bindings:
 
 - **Toggle Recording** — default `⌥Space`.
 - **Cancel Recording** — default `Esc`, active only while recording, transforming, or rewriting so it doesn't steal `Esc` from other apps when idle.
-- **Paste Last Transcription** — default `⌥⇧V`.
+- **Paste Last Transcription** — default `⌥,`.
 - **Push to Talk** — unbound by default.
-- **Rewrite with Voice** — voice-driven rewrite of selected text; unbound by default.
-- **Rewrite** — applies a fixed `"Rewrite this"` prompt to the selected text (no voice step); unbound by default.
+- **Rewrite with Voice** — voice-driven rewrite of selected text; default `⌥.`.
+- **Rewrite** — applies a fixed `"Rewrite this"` prompt to the selected text (no voice step); default `⌥/`.
 
 Shortcut bindings require a modifier (⌘, ⌥, ⌃, ⇧) — macOS does not permit global hotkeys bound to a bare key. The Shortcuts pane and the Help tab both surface this. Conflicting bindings are handled gracefully (no two commands silently share a key).
 
@@ -105,7 +108,8 @@ Closing the main window hides to the tray; Quit fully exits.
 A small floating overlay near the menu bar — a Dynamic Island-style pill — that reflects pipeline state without stealing focus.
 
 - **Live amplitude waveform** during recording — renders the actual audio level as a sine-wave-style animation inside the pill so the user can see Jot is hearing them. No static gif / fake animation.
-- **States:** Recording (with elapsed time + live waveform), Transcribing, Cleaning up (when transcript cleanup is on), Rewriting (during Rewrite), Success (with a short preview and Copy), Error (with the message).
+- **Live preview text** during recording when the streaming option is the active primary — partial transcript appears in the pill alongside the amplitude trail as you speak. Tap the pill to expand into a multi-line scrollable view of the running transcript (latest sentence highlighted, older sentences dimmed); tap again to collapse. Non-streaming primaries leave the pill click-through so taps near the notch pass to the underlying app.
+- **States:** Recording (with elapsed time + live waveform; live preview when streaming is active), Transcribing, Cleaning up (when transcript cleanup is on), Rewriting (during Rewrite), Success (with a short preview and Copy), Error (with the message).
 
 ## Home & Library
 
@@ -115,7 +119,6 @@ A small floating overlay near the menu bar — a Dynamic Island-style pill — t
 - **Recording detail** — every dictation recording opens into the waveform/detail view with playback, scrubbing, and the full transcript. Recording row actions: Re-transcribe, Reveal in Finder, Copy, Delete.
 - **Rewrite session detail** — every Rewrite run opens into a three-pane view (Selected text → Instruction → Rewritten output) with the model label and flavor in the header. Rewrite row actions: Copy Output, Delete (no playback, no Re-transcribe, no Reveal — Rewrite sessions don't persist audio).
 - **Inline management** — rename items inline; retention applies uniformly to both kinds via Settings → General → Keep library items.
-- **Last transcription card** — quick access to the newest result with Copy and Open in Recordings.
 
 ## Main Window
 
@@ -153,6 +156,7 @@ Fields throughout Settings carry per-field `info.circle` popovers for inline hel
   All three require a confirmation alert. Only "Erase all data" is tinted red — the other two are styled as normal interactive rows so they don't read as disabled.
 
 ### Transcription
+- Transcription model picker — choose between v3 (multilingual, default), Japanese, and v2 + EOU live-preview (experimental). Each row shows install state, footprint, primary radio, and (for the streaming option) an "Experimental" badge. Per-row download / delete affordances; the active primary is preserved across soft resets so a settings reset doesn't surprise the user with a fresh first-run model picker.
 - Auto-paste transcription
 - Auto-press Enter after paste
 - Keep transcription in clipboard
@@ -215,7 +219,7 @@ Shown on first launch and on demand from Settings → General. Nine steps, in or
 
 1. **Welcome**
 2. **Permissions** — grant Microphone, Input Monitoring, and Accessibility. A "Restart Jot" button is offered after granting Input Monitoring or Accessibility (a running app can't detect those until it relaunches).
-3. **Model** — downloads Parakeet on first run; already-downloaded models skip straight through.
+3. **Model** — pick the transcription engine and download it on first run. Three options: Parakeet TDT 0.6B v3 (multilingual, default), Parakeet 0.6B Japanese, and the experimental Parakeet 0.6B v2 + EOU streaming bundle (English live preview). Already-downloaded models skip straight through.
 4. **Microphone** — pick the input device for recording. A live input-level meter under the picker confirms the mic is hot before you continue. A disconnected preferred device stays visible as "Last used (not connected)".
 5. **Shortcuts** — preview of the default Toggle Recording shortcut.
 6. **Test dictation** — speak to verify the full pipeline end-to-end. The user controls the capture window (no hard 3-second cap) and can re-test as many times as they like.
