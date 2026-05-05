@@ -44,7 +44,7 @@ struct ModelStep: View {
             .textSelection(.enabled)
 
             VStack(spacing: 8) {
-                ForEach(ParakeetModelID.allCases, id: \.rawValue) { model in
+                ForEach(ParakeetModelID.visibleCases, id: \.rawValue) { model in
                     ModelOptionRow(
                         model: model,
                         isSelected: model == selectedModel,
@@ -277,9 +277,14 @@ private struct ModelOptionRow: View {
                     .font(.system(size: 16))
                     .foregroundStyle(isSelected ? Color.accentColor : .secondary)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.displayName)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.primary)
+                    HStack(spacing: 6) {
+                        Text(model.displayName)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.primary)
+                        if model.isExperimental {
+                            ExperimentalBadge()
+                        }
+                    }
                     HStack(spacing: 8) {
                         Text(sizeText)
                             .font(.system(size: 11))

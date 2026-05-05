@@ -26,6 +26,13 @@ struct PillView: View {
     static let pillHeight: CGFloat = 36
     static let compactPillWidth: CGFloat = 360
     static let expandedPillWidth: CGFloat = 600
+    /// Width when streaming partial is visible — matches
+    /// `OverlayWindowController.streamingPillWidth`.
+    static let streamingPillWidth: CGFloat = 480
+    /// Width and total height when the recording pill is expanded into
+    /// the multi-line streaming transcript view (tap to expand).
+    static let expandedRecordingWidth: CGFloat = 640
+    static let expandedRecordingHeight: CGFloat = 240
     static let horizontalContentPadding: CGFloat = 14
     static let contentSpacing: CGFloat = 10
     static let errorTextMaxWidth: CGFloat =
@@ -37,9 +44,25 @@ struct PillView: View {
             switch model.state {
             case .hidden:
                 Color.clear.frame(width: 0, height: 0)
-            case .recording(let elapsed):
-                pillBody {
-                    RecordingContent(elapsed: elapsed, reduceMotion: reduceMotion)
+            case .recording(let elapsed, let streamingPartial):
+                if model.isPillExpanded {
+                    expandedRecordingBody {
+                        ExpandedRecordingContent(
+                            elapsed: elapsed,
+                            streamingPartial: streamingPartial,
+                            reduceMotion: reduceMotion
+                        )
+                    }
+                    .onTapGesture { model.togglePillExpanded() }
+                } else {
+                    pillBody {
+                        RecordingContent(
+                            elapsed: elapsed,
+                            streamingPartial: streamingPartial,
+                            reduceMotion: reduceMotion
+                        )
+                    }
+                    .onTapGesture { model.togglePillExpanded() }
                 }
             case .transcribing:
                 pillBody {
@@ -98,6 +121,25 @@ struct PillView: View {
         .transition(pillTransition)
     }
 
+    /// Body for the expanded recording view. A taller rounded-rect (not
+    /// a Capsule — the aspect ratio would render as a stadium oval) with
+    /// the dot/amplitude/timer chrome on top and a scrollable streaming
+    /// transcript below.
+    @ViewBuilder
+    private func expandedRecordingBody<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .frame(width: Self.expandedRecordingWidth, height: Self.expandedRecordingHeight, alignment: .top)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.black)
+                .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .transition(pillTransition)
+    }
+
     private var pillTransition: AnyTransition {
         if reduceMotion {
             return .opacity.animation(.easeInOut(duration: 0.12))
@@ -114,19 +156,134 @@ struct PillView: View {
 
 private struct RecordingContent: View {
     let elapsed: TimeInterval
+    let streamingPartial: String?
     let reduceMotion: Bool
+
+    /// Empty / whitespace-only partials behave as "no partial yet". The
+    /// dot + amplitude bar are visible in either case; the middle text
+    /// slot just stays empty until the first non-blank partial lands.
+    private var trimmedPartial: String? {
+        guard let text = streamingPartial else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 
     var body: some View {
         HStack(spacing: 10) {
             PulsingDot(color: Color(nsColor: .systemRed), reduceMotion: reduceMotion)
+            // Compact amplitude trail to the right of the dot. Always
+            // visible while recording — the streaming text region sits
+            // alongside, not on top of, the audio meter so the user
+            // always sees that the mic is hearing them.
             AmplitudeTrail(reduceMotion: reduceMotion)
-                .frame(maxWidth: .infinity, minHeight: 26, maxHeight: 30)
+                .frame(width: 56, height: 22)
+            if let text = trimmedPartial {
+                // Truncated trailing-fit text — the latest words win
+                // when the partial overflows the available width.
+                Text(text)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .transition(.opacity)
+            } else {
+                // No partial yet — keep the layout stable by reserving
+                // the same flexible space the text would occupy.
+                Spacer(minLength: 0)
+            }
             Text(PillViewModel.formatElapsed(elapsed))
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.9))
                 .monospacedDigit()
                 .contentTransition(.numericText())
             AppLabel()
+        }
+        .transition(.opacity.animation(.easeOut(duration: 0.14)))
+    }
+}
+
+/// Expanded recording view: same chrome (dot + amplitude + timer + Jot)
+/// in a top header strip, with the full streaming transcript scrollable
+/// below. Tap anywhere to collapse. The transcript is split into
+/// sentences and the latest line is highlighted in white; older lines
+/// are dimmed for visual hierarchy.
+private struct ExpandedRecordingContent: View {
+    let elapsed: TimeInterval
+    let streamingPartial: String?
+    let reduceMotion: Bool
+
+    private var lines: [String] {
+        guard let text = streamingPartial?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty
+        else { return [] }
+        // Split on sentence-terminal punctuation followed by whitespace.
+        // Keep the punctuation so each line reads naturally.
+        var result: [String] = []
+        var current = ""
+        for ch in text {
+            current.append(ch)
+            if (ch == "." || ch == "!" || ch == "?") {
+                let trimmed = current.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty { result.append(trimmed) }
+                current = ""
+            }
+        }
+        let tail = current.trimmingCharacters(in: .whitespaces)
+        if !tail.isEmpty { result.append(tail) }
+        return result.suffix(15).map { $0 }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Top strip mirrors the collapsed pill chrome.
+            HStack(spacing: 10) {
+                PulsingDot(color: Color(nsColor: .systemRed), reduceMotion: reduceMotion)
+                AmplitudeTrail(reduceMotion: reduceMotion)
+                    .frame(width: 56, height: 22)
+                Spacer(minLength: 0)
+                Text(PillViewModel.formatElapsed(elapsed))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                AppLabel()
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+
+            Divider().background(Color.white.opacity(0.15))
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    if lines.isEmpty {
+                        Text("Listening…")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.white.opacity(0.4))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .padding(14)
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(lines.enumerated()), id: \.offset) { idx, line in
+                                Text(line)
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(idx == lines.count - 1 ? .white : Color.white.opacity(0.6))
+                                    .id(idx)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                    }
+                }
+                .onChange(of: streamingPartial ?? "") { _, _ in
+                    if !lines.isEmpty {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo(lines.count - 1, anchor: .bottom)
+                        }
+                    }
+                }
+            }
         }
         .transition(.opacity.animation(.easeOut(duration: 0.14)))
     }

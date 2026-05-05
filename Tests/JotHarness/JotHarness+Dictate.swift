@@ -270,7 +270,7 @@ extension JotHarness {
             }
             return .hidden
         case .recording(let startedAt):
-            return .recording(elapsed: Date().timeIntervalSince(startedAt))
+            return .recording(elapsed: Date().timeIntervalSince(startedAt), streamingPartial: nil)
         case .transcribing:
             return .transcribing
         case .transforming:

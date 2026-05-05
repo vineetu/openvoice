@@ -82,6 +82,16 @@ final class VoiceInputPipeline {
     /// Live `Task` awaiting `capture.disconnectEvents()`. Cancelled via
     /// `clearPhase()` so a stuck listener can't outlive the session.
     private var disconnectListenerTask: Task<Void, Never>?
+    /// Captured `DualPipelineTranscriber` for the active streaming
+    /// session, set in `beginStreamingSession` and cleared in
+    /// `endStreamingSession`. Storing the dual per session (rather
+    /// than re-reading `holder.transcriber` on cleanup) protects
+    /// against a mid-session `setPrimary` swap: the cleanup path
+    /// always tears down the engine that was actually started, even
+    /// when `holder.transcriber` has already moved on. (See plan
+    /// §6.3 / §11 for the wider in-flight gate work; this is the
+    /// minimum-viable defense.)
+    private var activeStreamingDual: DualPipelineTranscriber?
 
     init(
         capture: any AudioCapturing = AudioCapture(),
@@ -127,12 +137,28 @@ final class VoiceInputPipeline {
         phase = .recording(token, startedAt: Date())
         disconnectCallback = onDisconnect
 
+        // Streaming option: bring up the streaming session BEFORE
+        // `capture.start()` so the audio sink is wired and the
+        // streaming engine has a per-session AsyncStream continuation
+        // ready when the very first audio chunk lands. The streaming
+        // engine loads its model lazily via its consumer task; chunks
+        // captured before the model warms accumulate in the unbounded
+        // stream and drain as soon as the model is ready. So even the
+        // first recording after app launch shows a live preview (just
+        // with a few extra seconds before the first partial appears).
+        // Non-streaming primaries (v3 / JA) skip entirely — the
+        // downcast fails and `dual` stays nil.
+        if let dual = transcriber as? DualPipelineTranscriber {
+            await beginStreamingSession(token: token, dual: dual)
+        }
+
         do {
             try await capture.start()
             do {
                 try Task.checkCancellation()
             } catch is CancellationError {
                 await capture.cancel()
+                await endStreamingSession(graceful: false)
                 invalidateIfMatching(token)
                 throw CancellationError()
             }
@@ -144,15 +170,19 @@ final class VoiceInputPipeline {
             return token
         } catch is CancellationError {
             await capture.cancel()
+            await endStreamingSession(graceful: false)
             invalidateIfMatching(token)
             throw CancellationError()
         } catch AudioCaptureError.engineStartTimeout {
+            await endStreamingSession(graceful: false)
             clearIfMatching(token)
             throw PipelineError.engineStartTimeout
         } catch AudioCaptureError.engineStart(let error) {
+            await endStreamingSession(graceful: false)
             clearIfMatching(token)
             throw PipelineError.engineStart(error)
         } catch {
+            await endStreamingSession(graceful: false)
             clearIfMatching(token)
             throw PipelineError.engineStart(error)
         }
@@ -192,9 +222,17 @@ final class VoiceInputPipeline {
         do {
             recording = try await capture.stop()
         } catch {
+            await endStreamingSession(graceful: false)
             clearIfMatching(token)
             throw PipelineError.transcribeFailed(error)
         }
+
+        // Order: stop audio first → flush streaming engine's tail
+        // (ordering matters; finishing before stop would race with
+        // late buffers from the writer queue) → clear the partial
+        // store. The audio sink was set in `beginStreamingSession`;
+        // it's idempotent to clear it here on every path.
+        await endStreamingSession(graceful: true)
 
         // Voice-command owners (Rewrite with Voice, future Ask Jot
         // voice input) explicitly do NOT persist the captured WAV.
@@ -258,8 +296,89 @@ final class VoiceInputPipeline {
         if isRecordingPhase {
             await capture.cancel()
         }
+        // No graceful flush on cancel — user is aborting, partial
+        // text doesn't matter.
+        await endStreamingSession(graceful: false)
 
         invalidateGenerationIfCurrent(token)
+    }
+
+    // MARK: - Streaming option wiring
+
+    /// Bring up the streaming pipeline alongside the batch capture.
+    /// - Sets the partial store's session token so late callbacks
+    ///   from a prior session can't bleed into this one.
+    /// - Wires the audio capture's streaming sink so each converted
+    ///   16 kHz mono Float32 chunk reaches `StreamingTranscriber.enqueue`.
+    /// - Starts the streaming transcriber with a closure that
+    ///   forwards partials into the store with the same token.
+    /// Best-effort — failures degrade silently to batch-only delivery
+    /// (the pill simply doesn't show streaming text). Batch is the
+    /// authoritative source.
+    ///
+    /// The sink calls `enqueue(samples:)` synchronously — it is
+    /// `nonisolated` on the actor and yields straight into a per-session
+    /// AsyncStream. Spawning a `Task { await actor.feed(...) }` per
+    /// chunk would re-order audio at the actor entry point because Swift
+    /// doesn't guarantee FIFO when multiple Tasks await the same actor;
+    /// scrambled audio prevents the EOU encoder from making progress and
+    /// was the root cause of the ~30 s first-partial delay observed in
+    /// the previous build.
+    private func beginStreamingSession(token: Token, dual: DualPipelineTranscriber) async {
+        let store = StreamingPartialStore.shared
+        let streaming = dual.streaming
+
+        store.beginSession(token: token.generation)
+        activeStreamingDual = dual
+
+        let publish: @Sendable (String, UInt64) -> Void = { text, generation in
+            Task { @MainActor in
+                StreamingPartialStore.shared.publish(text, token: generation)
+            }
+        }
+        // Lazy-load consumer: returns immediately. The streaming engine
+        // loads inside the consumer task; chunks yielded before load
+        // completes accumulate in the unbounded AsyncStream and drain
+        // once warm. No throwing path — load failures are logged and
+        // the consumer task simply exits without firing partials.
+        await streaming.start(generation: token.generation, onPartial: publish)
+
+        // Wire sink BEFORE the caller starts capture so the very first
+        // audio chunk flows through. `setStreamingSink` writes the
+        // property synchronously; `configureAUHALWithTimeout` reads it
+        // when AUHAL comes up.
+        let sink: @Sendable ([Float]) -> Void = { samples in
+            streaming.enqueue(samples: samples)
+        }
+        await capture.setStreamingSink(sink)
+    }
+
+    /// Tear down the streaming pipeline. `graceful: true` flushes the
+    /// trailing buffered samples through the EOU engine (ordering
+    /// after `capture.stop` so we don't race late writer-queue
+    /// buffers); `graceful: false` abandons immediately for cancel
+    /// paths. Idempotent — safe to call on the v3 / JA path where
+    /// `activeStreamingDual` is `nil`.
+    ///
+    /// Critically uses the *captured* `activeStreamingDual` rather
+    /// than re-reading `holder.transcriber`. A mid-session
+    /// `setPrimary` swap would change the holder's transcriber under
+    /// us; without the captured reference, the downcast on cleanup
+    /// would fail and the streaming engine that was actually started
+    /// would leak (still running, still feeding the audio sink that
+    /// will then be cleared by an unrelated session's setStreamingSink
+    /// call). Capturing per session bounds the leak to "until the
+    /// pipeline is cleared".
+    private func endStreamingSession(graceful: Bool) async {
+        guard let dual = activeStreamingDual else { return }
+        defer { activeStreamingDual = nil }
+        await capture.setStreamingSink(nil)
+        if graceful {
+            _ = await dual.streaming.finish()
+        } else {
+            await dual.streaming.cancel()
+        }
+        StreamingPartialStore.shared.endSession()
     }
 
     func stillActive(_ token: Token) -> Bool {

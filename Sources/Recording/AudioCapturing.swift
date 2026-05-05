@@ -30,6 +30,15 @@ protocol AudioCapturing: Sendable {
     /// during recording. Pass `nil` to detach.
     func setAmplitudePublisher(_ publisher: AmplitudePublisher?) async
 
+    /// Optional streaming-sink callback fanned out from the writer
+    /// queue with each converted 16 kHz mono Float32 chunk. Used by
+    /// the streaming-option pipeline to feed partials to FluidAudio's
+    /// EOU engine in lockstep with the on-disk WAV write. Live
+    /// conformer copies the closure into the writer queue's
+    /// `QueueState`; the harness stub is a no-op (default below).
+    /// Pass `nil` to detach.
+    func setStreamingSink(_ sink: (@Sendable ([Float]) -> Void)?) async
+
     /// Stream of mid-recording disconnect events for the active session.
     /// Returns an already-finished stream when no session is running so
     /// the caller's `for await` loop terminates cleanly.
@@ -53,4 +62,10 @@ extension AudioCapturing {
     }
 
     func lastFallbackInfo() async -> AudioCaptureFallbackInfo? { nil }
+
+    /// Default no-op so harness conformers (and any future seam that
+    /// doesn't need streaming) keep compiling without re-stubbing.
+    /// The live `AudioCapture` overrides this to drive the writer
+    /// queue's `streamingSink` field.
+    func setStreamingSink(_ sink: (@Sendable ([Float]) -> Void)?) async {}
 }

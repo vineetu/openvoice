@@ -21,11 +21,17 @@ final class OverlayWindowController {
     private var screenChangeObserver: NSObjectProtocol?
     private var reduceMotionObserver: NSObjectProtocol?
     private var stateCancellable: AnyCancellable?
+    private var expansionCancellable: AnyCancellable?
+    private var streamingActiveCancellable: AnyCancellable?
 
     /// Natural footprint of the compact pill (visual surface, not including
     /// shadow). Error pills can grow beyond this, up to `expandedPillWidth`.
     static let compactPillWidth: CGFloat = PillView.compactPillWidth
     static let expandedPillWidth: CGFloat = PillView.expandedPillWidth
+    /// Width used when the recording pill is showing a streaming
+    /// partial. Single source of truth on `PillView` so layout / window
+    /// sizing can't drift apart.
+    static let streamingPillWidth: CGFloat = PillView.streamingPillWidth
     static let pillHeight: CGFloat = PillView.pillHeight
     static let horizontalPadding: CGFloat = 12
     static let bottomPadding: CGFloat = 24
@@ -83,15 +89,34 @@ final class OverlayWindowController {
             }
         }
 
-        // Click-through policy: follow pill state. During recording /
-        // transcribing the pill is pure status (ignore mouse). In success /
-        // error states the user can interact with the copy glyph or info
-        // tooltip, so the window must receive events.
+        // Click-through policy: follow pill state. During recording the
+        // pill is tappable (toggle expand/collapse for streaming
+        // partial). During transcribing the pill is pure status (ignore
+        // mouse). In success / error states the user can interact with
+        // the copy glyph or info tooltip.
         stateCancellable = model.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 self?.applyClickThrough(for: state)
                 self?.updateFrame(for: state)
+            }
+        // Re-layout when the user taps to expand or collapse the
+        // recording pill. Frame change is animated by AppKit since
+        // panel.setFrame uses display:true.
+        expansionCancellable = model.$isPillExpanded
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateFrame()
+            }
+        // Refresh click-through when a streaming session begins or
+        // ends. Without this, a v3-then-streaming sequence would keep
+        // the v3 ignoresMouseEvents=true setting through the streaming
+        // session and the user couldn't tap to expand.
+        streamingActiveCancellable = model.$isStreamingSessionActive
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.applyClickThrough(for: self.model.state)
             }
     }
 
@@ -135,7 +160,14 @@ final class OverlayWindowController {
     }
 
     private func pillSize(for state: PillViewModel.PillState) -> NSSize {
-        NSSize(width: pillWidth(for: state), height: Self.pillHeight)
+        // Expanded recording: taller multi-line transcript view.
+        if model.isPillExpanded, case .recording = state {
+            return NSSize(
+                width: PillView.expandedRecordingWidth,
+                height: PillView.expandedRecordingHeight
+            )
+        }
+        return NSSize(width: pillWidth(for: state), height: Self.pillHeight)
     }
 
     private func pillWidth(for state: PillViewModel.PillState) -> CGFloat {
@@ -147,7 +179,17 @@ final class OverlayWindowController {
             // fallback message ("Recorded with system default — \(savedName)
             // was unavailable.") doesn't truncate to ellipsis.
             return errorPillWidth(for: message)
-        case .hidden, .recording, .transcribing, .condensing, .rewriting, .transforming, .success:
+        case .recording(_, let streamingPartial):
+            // Streaming option only: when the partial is non-empty,
+            // widen the pill so the live preview text has room. A
+            // fixed wider width (rather than text-measured per
+            // emission) avoids churning `setFrame` calls.
+            if let text = streamingPartial,
+               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return Self.streamingPillWidth
+            }
+            return Self.compactPillWidth
+        case .hidden, .transcribing, .condensing, .rewriting, .transforming, .success:
             return Self.compactPillWidth
         }
     }
@@ -169,9 +211,16 @@ final class OverlayWindowController {
     private func applyClickThrough(for state: PillViewModel.PillState) {
         guard let panel else { return }
         switch state {
-        case .hidden, .recording, .transcribing, .condensing, .rewriting, .transforming, .notice:
+        case .hidden, .transcribing, .condensing, .rewriting, .transforming, .notice:
             // Notices are pure informational — no copy glyph or follow-up.
             panel.ignoresMouseEvents = true
+        case .recording:
+            // Recording pill is tappable ONLY during a streaming
+            // session — that's the only state where tap-to-expand has
+            // anything to show. Non-streaming primaries (v3 / JA) stay
+            // click-through so a tap near the notch passes to whatever
+            // app the user is working in.
+            panel.ignoresMouseEvents = !model.isStreamingSessionActive
         case .success, .error:
             panel.ignoresMouseEvents = false
         }

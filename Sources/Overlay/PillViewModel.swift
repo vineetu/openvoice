@@ -13,7 +13,14 @@ import SwiftUI
 final class PillViewModel: ObservableObject {
     enum PillState: Equatable {
         case hidden
-        case recording(elapsed: TimeInterval)
+        /// `streamingPartial` is the live preview text from
+        /// `StreamingPartialStore` for the streaming option's EOU 120M
+        /// engine. `nil` for non-streaming primaries (v3 / JA) and for
+        /// streaming sessions before the first partial lands. The pill
+        /// view conditionally swaps the middle slot to render the
+        /// partial when non-empty; `OverlayWindowController` widens
+        /// the frame on the same condition.
+        case recording(elapsed: TimeInterval, streamingPartial: String?)
         case transcribing
         case condensing   // Ask Jot voice-input condensation (spec v5 §8).
         case rewriting
@@ -30,6 +37,31 @@ final class PillViewModel: ObservableObject {
 
     @Published private(set) var state: PillState = .hidden
 
+    /// True while the user has tapped the recording pill to expand it
+    /// into the multi-line streaming-transcript view. Only meaningful
+    /// when `state == .recording` AND a streaming session is active.
+    /// Reset to `false` automatically on any non-recording state
+    /// transition so a stale expansion doesn't outlive the session.
+    @Published private(set) var isPillExpanded: Bool = false
+
+    /// Mirrors `StreamingPartialStore.shared.isActive`. `true` only
+    /// while the streaming option is the active primary AND the
+    /// pipeline has wired the streaming session for the current
+    /// recording. Non-streaming primaries (v3 / JA) keep this `false`
+    /// so their recording pills stay click-through and don't surface
+    /// a tap-to-expand affordance the user can't act on.
+    @Published private(set) var isStreamingSessionActive: Bool = false
+
+    /// Toggle the expanded view. No-op outside a recording, AND
+    /// no-op for non-streaming recordings — the expanded mode only
+    /// makes sense while a streaming session is producing partial
+    /// text. (#10 from the cleanup list.)
+    func togglePillExpanded() {
+        guard case .recording = state else { return }
+        guard isStreamingSessionActive else { return }
+        isPillExpanded.toggle()
+    }
+
     /// Auto-dismiss windows (seconds).
     static let successLinger: TimeInterval = 2.4
     /// Non-actionable errors can clear sooner because the pill has no follow-up affordance yet.
@@ -41,10 +73,26 @@ final class PillViewModel: ObservableObject {
     private var tickTimer: Timer?
     private var dismissTask: Task<Void, Never>?
 
+    /// Cached latest streaming partial. Read by `tick()` to preserve
+    /// the partial across the 0.5 s timer-driven state rebuilds —
+    /// otherwise the timer would clear the partial twice a second.
+    /// Written by the `StreamingPartialStore.$partial` subscriber.
+    private var latestPartial: String?
+
     private var recorderCancellable: AnyCancellable?
     private var deliveryCancellable: AnyCancellable?
     private var rewriteCancellable: AnyCancellable?
     private var rewriteResultCancellable: AnyCancellable?
+    /// Subscriber on `StreamingPartialStore.shared.$partial`. Updates
+    /// `latestPartial` and rebuilds the pill state when currently
+    /// `.recording`. Same subscriber covers all three voice-capture
+    /// sites (Dictation, Articulate, Ask Jot) — the partial store is
+    /// owner-agnostic.
+    private var streamingPartialCancellable: AnyCancellable?
+    /// Subscriber on `StreamingPartialStore.shared.$isActive`. Mirrors
+    /// the active flag onto `isStreamingSessionActive` for click-through
+    /// and tap-to-expand gating.
+    private var streamingActiveCancellable: AnyCancellable?
     /// Subscription that surfaces `RecorderController.lastFallbackNotice`
     /// as a `.notice(...)` pill once a fresh `lastResult` has landed and
     /// the success pill has dismissed. See `docs/plans/mic-disconnect-handling.md`.
@@ -106,6 +154,41 @@ final class PillViewModel: ObservableObject {
                     self?.showRewriteSuccess(result)
                 }
         }
+
+        // Streaming partial subscriber — drives the live preview text
+        // shown inside the recording pill for the streaming option.
+        // No-op for non-streaming primaries because the store stays
+        // empty (the pipeline never calls `beginSession` / `publish`
+        // unless the active transcriber is a `DualPipelineTranscriber`).
+        streamingPartialCancellable = StreamingPartialStore.shared.$partial
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] partial in
+                self?.streamingPartialChanged(partial)
+            }
+
+        // Streaming-session-active subscriber — drives whether the pill
+        // is tappable / expandable. `false` for non-streaming primaries
+        // so v3 / JA recordings stay click-through.
+        streamingActiveCancellable = StreamingPartialStore.shared.$isActive
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] active in
+                self?.isStreamingSessionActive = active
+                if !active {
+                    self?.isPillExpanded = false
+                }
+            }
+    }
+
+    private func streamingPartialChanged(_ partial: String?) {
+        latestPartial = partial
+        // Only rebuild state while we're currently recording —
+        // streaming text only renders inside the recording pill.
+        if case .recording(let elapsed, _) = state {
+            let next: PillState = .recording(elapsed: elapsed, streamingPartial: partial)
+            if next != state {
+                state = next
+            }
+        }
     }
 
     deinit {
@@ -151,7 +234,7 @@ final class PillViewModel: ObservableObject {
             }
         case .recording(let startedAt):
             recordingStartedAt = startedAt
-            transition(to: .recording(elapsed: Date().timeIntervalSince(startedAt)))
+            transition(to: .recording(elapsed: Date().timeIntervalSince(startedAt), streamingPartial: latestPartial))
             startTick()
         case .transcribing:
             stopTick()
@@ -181,7 +264,7 @@ final class PillViewModel: ObservableObject {
             break
         case .recording(let startedAt):
             recordingStartedAt = startedAt
-            transition(to: .recording(elapsed: Date().timeIntervalSince(startedAt)))
+            transition(to: .recording(elapsed: Date().timeIntervalSince(startedAt), streamingPartial: latestPartial))
             startTick()
         case .transcribing:
             stopTick()
@@ -225,6 +308,15 @@ final class PillViewModel: ObservableObject {
     private func transition(to new: PillState) {
         dismissTask?.cancel()
         dismissTask = nil
+        // Collapse the expanded recording view on any state transition.
+        // Keeps the expanded panel from outliving the streaming session.
+        if case .recording = new {
+            // Stay in current expanded state across rebuilds of the
+            // recording state (timer tick, partial update). Only reset
+            // when the pill leaves recording entirely.
+        } else {
+            isPillExpanded = false
+        }
         state = new
     }
 
@@ -260,7 +352,13 @@ final class PillViewModel: ObservableObject {
         guard let started = recordingStartedAt else { return }
         let elapsed = Date().timeIntervalSince(started)
         if case .recording = state {
-            state = .recording(elapsed: elapsed)
+            // Preserve the cached streaming partial across rebuilds.
+            // Without this, the 0.5 s tick clears the partial text
+            // twice a second — visible flicker. Equality on the new
+            // state is built into PillState's `Equatable` synthesis,
+            // so SwiftUI redraws only when elapsed or partial actually
+            // changed.
+            state = .recording(elapsed: elapsed, streamingPartial: latestPartial)
         }
     }
 

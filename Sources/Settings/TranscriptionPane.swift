@@ -23,7 +23,7 @@ struct TranscriptionPane: View {
     var body: some View {
         Form {
             Section {
-                ForEach(ParakeetModelID.allCases, id: \.rawValue) { model in
+                ForEach(ParakeetModelID.visibleCases, id: \.rawValue) { model in
                     modelRow(model)
                 }
             } header: {
@@ -129,8 +129,13 @@ struct TranscriptionPane: View {
                 .help(installed ? "Make primary" : "Install this model first")
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.displayName)
-                        .font(.system(size: 13, weight: isPrimary ? .semibold : .regular))
+                    HStack(spacing: 6) {
+                        Text(model.displayName)
+                            .font(.system(size: 13, weight: isPrimary ? .semibold : .regular))
+                        if model.isExperimental {
+                            ExperimentalBadge()
+                        }
+                    }
                     Text(rowSubtitle(for: model, installed: installed, state: state))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)

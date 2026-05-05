@@ -14,9 +14,38 @@ enum ResetActions {
     /// API key deletion routes through `KeychainStoring` (production:
     /// `LiveKeychain`; harness: `StubKeychain`) instead of the static
     /// `KeychainHelper`. Closes the Phase 3 #29 Scope-A deferral.
-    static func softReset(keychain: any KeychainStoring) {
+    ///
+    /// `preserveModelChoice` (streaming-option v2.0 §11 R15): the soft
+    /// reset wipes every UserDefaults key including
+    /// `jot.defaultModelID` and `jot.modelChoice.v2DefaultStamped`,
+    /// which would cause the next launch's classifier to silently
+    /// reclassify a streaming user back to v3 when the v3 cache is
+    /// missing. Default `true` preserves the model choice so the
+    /// user keeps their primary across a soft reset; `hardReset`
+    /// passes `false` because the full wipe is intentional.
+    static func softReset(keychain: any KeychainStoring, preserveModelChoice: Bool = true) {
         if let bundleID = Bundle.main.bundleIdentifier {
+            let preservedModelID: String? = preserveModelChoice
+                ? UserDefaults.standard.string(forKey: TranscriberHolder.defaultsKey)
+                : nil
+            let preservedV2Stamped: Bool = preserveModelChoice
+                && UserDefaults.standard.bool(forKey: ModelChoiceMigration.v2DefaultStampedKey)
+            let preservedPinChecked: Bool = preserveModelChoice
+                && UserDefaults.standard.bool(forKey: ModelChoiceMigration.pinCheckedKey)
+
             UserDefaults.standard.removePersistentDomain(forName: bundleID)
+
+            if preserveModelChoice {
+                if let id = preservedModelID {
+                    UserDefaults.standard.set(id, forKey: TranscriberHolder.defaultsKey)
+                }
+                if preservedV2Stamped {
+                    UserDefaults.standard.set(true, forKey: ModelChoiceMigration.v2DefaultStampedKey)
+                }
+                if preservedPinChecked {
+                    UserDefaults.standard.set(true, forKey: ModelChoiceMigration.pinCheckedKey)
+                }
+            }
         }
 
         clearAPIKeys(keychain: keychain)
@@ -42,7 +71,10 @@ enum ResetActions {
         } catch {
             Task { await ErrorLog.shared.error(component: "ResetActions", message: "hardReset failed to write marker file", context: ["error": ErrorLog.redactedAppleError(error)]) }
         }
-        softReset(keychain: keychain)
+        // Hard reset cascades with `preserveModelChoice: false` so the
+        // wipe is total — user explicitly asked for a from-scratch
+        // state, including model choice.
+        softReset(keychain: keychain, preserveModelChoice: false)
     }
 
     /// Delete every per-provider API key + the legacy shared entry via

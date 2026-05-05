@@ -123,6 +123,41 @@ public actor AudioCapture: AudioCapturing {
         amplitudePublisher = publisher
     }
 
+    /// Optional streaming-sink callback fanned out from the writer
+    /// queue to consumers like `StreamingTranscriber`. Set by
+    /// `VoiceInputPipeline` immediately after `start()` returns when
+    /// the active model supports streaming (Phase 2). The sink fires
+    /// from the writer queue with each converted 16 kHz mono Float32
+    /// chunk; the consumer is responsible for hopping onto its own
+    /// actor.
+    ///
+    /// Stored as a `@Sendable` closure so it can be copied across
+    /// isolation domains into `QueueState`. `nil` for non-streaming
+    /// pipelines (the v3 / JA path leaves it untouched and the file-
+    /// only writer code path is preserved exactly).
+    nonisolated(unsafe) public var streamingSink: (@Sendable ([Float]) -> Void)?
+
+    public func setStreamingSink(_ sink: (@Sendable ([Float]) -> Void)?) {
+        streamingSink = sink
+        // Hot-swap during an in-flight session — clearing the sink
+        // mid-recording must propagate immediately so a session that's
+        // switching primaries doesn't keep feeding the old streaming
+        // engine. `ctx` is the live `CallbackContext` for the active
+        // session; `nil` between sessions.
+        //
+        // Thread safety: `QueueState` is documented writer-queue-only
+        // (see the `QueueState` definition at the bottom of this file),
+        // so direct mutation from the actor would race the writer
+        // queue's read of `queueState.streamingSink` inside
+        // `convertAndWrite`. Dispatch the mutation onto the writer
+        // queue so the read/write pair is serialized end-to-end.
+        if let queueState = ctx?.queueState, let writerQueue = ctx?.writerQueue {
+            writerQueue.async {
+                queueState.streamingSink = sink
+            }
+        }
+    }
+
     /// Hand the controller a stream of disconnect events for the
     /// currently-running session. Returns an empty (already-finished)
     /// stream when no session is active so the caller's `for await`
@@ -206,6 +241,7 @@ public actor AudioCapture: AudioCapturing {
                 savedNameCache: savedNameCache,
                 url: url,
                 amplitudePublisher: publisher,
+                streamingSink: streamingSink,
                 writerQueue: writerQueue,
                 disconnectQueue: disconnectQueue,
                 disconnectContinuation: newContinuation,
@@ -594,6 +630,7 @@ public actor AudioCapture: AudioCapturing {
         savedNameCache: String,
         url: URL,
         amplitudePublisher: AmplitudePublisher?,
+        streamingSink: (@Sendable ([Float]) -> Void)?,
         writerQueue: DispatchQueue,
         disconnectQueue: DispatchQueue,
         disconnectContinuation: AsyncStream<AudioCaptureDisconnectEvent>.Continuation,
@@ -849,6 +886,7 @@ public actor AudioCapture: AudioCapturing {
                 let queueState = QueueState()
                 queueState.audioFile = audioFile
                 queueState.converter = converter
+                queueState.streamingSink = streamingSink
                 let context = CallbackContext(
                     unit: u,
                     renderABL: abl,
@@ -1010,6 +1048,17 @@ fileprivate final class QueueState: @unchecked Sendable {
     var samples: [Float] = []
     var audioFile: AVAudioFile?
     var converter: AVAudioConverter?
+    /// Optional fan-out sink invoked under the writer queue with each
+    /// converted 16 kHz mono Float32 chunk. Today wired by
+    /// `VoiceInputPipeline.beginStreamingSession` to forward chunks to
+    /// `StreamingTranscriber.enqueue(samples:)`, which yields them
+    /// into a per-session AsyncStream consumed by FluidAudio's
+    /// `StreamingEouAsrManager.process(audioBuffer:)`. `nil` for
+    /// non-streaming pipelines (v3 / JA primary). The samples buffer
+    /// is small (≤ 16 384 floats per chunk) so the `Array.init` copy
+    /// is cheap; the sink consumer is responsible for ordering /
+    /// concurrency hand-off.
+    var streamingSink: (@Sendable ([Float]) -> Void)?
 }
 
 /// Holds everything the C input callback needs without crossing actor
@@ -1368,6 +1417,16 @@ private func convertAndWrite(
 
     let channelPtr = channelData[0]
     queueState.samples.append(contentsOf: UnsafeBufferPointer(start: channelPtr, count: frameCount))
+
+    // Fan out a copy of the converted samples to the optional streaming
+    // sink. The copy is cheap (≤ 64 KB at 16 kHz mono float for the
+    // largest chunk we'll see) and lets the sink consumer (the
+    // streaming transcriber actor) own the data without racing the
+    // writer queue's continued mutation of `outBuffer`.
+    if let sink = queueState.streamingSink {
+        let snapshot = Array(UnsafeBufferPointer(start: channelPtr, count: frameCount))
+        sink(snapshot)
+    }
 
     do {
         try audioFile.write(from: outBuffer)

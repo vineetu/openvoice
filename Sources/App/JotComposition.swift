@@ -85,6 +85,12 @@ struct SeamOverrides {
     /// don't depend on whether the dev/CI machine has a Parakeet model
     /// cached on disk. Production omits this and gets a real disk scan.
     var installedModelIDs: Set<ParakeetModelID>?
+    /// Streaming-option migration seam: lets harness tests stub the
+    /// "is the user's recordings directory empty?" signal that
+    /// `ModelChoiceMigration` reads as part of the §3.4.4 freshness
+    /// heuristic. Production omits this and gets a real
+    /// `~/Library/Application Support/Jot/Recordings/` scan.
+    var recordingsDirectoryEmpty: Bool?
 
     init(
         audioCapture: (any AudioCapturing)? = nil,
@@ -95,7 +101,8 @@ struct SeamOverrides {
         keychain: (any KeychainStoring)? = nil,
         permissions: (any PermissionsObserving)? = nil,
         logSink: (any LogSink)? = nil,
-        installedModelIDs: Set<ParakeetModelID>? = nil
+        installedModelIDs: Set<ParakeetModelID>? = nil,
+        recordingsDirectoryEmpty: Bool? = nil
     ) {
         self.audioCapture = audioCapture
         self.transcriber = transcriber
@@ -106,6 +113,7 @@ struct SeamOverrides {
         self.permissions = permissions
         self.logSink = logSink
         self.installedModelIDs = installedModelIDs
+        self.recordingsDirectoryEmpty = recordingsDirectoryEmpty
     }
 }
 
@@ -213,6 +221,45 @@ enum JotComposition {
         // — same controller-construction code, different OS seam
         // instances.
         let audioCapture: any AudioCapturing = overrides?.audioCapture ?? AudioCapture()
+
+        // Streaming-option v1.7 pin migration. Runs BEFORE
+        // `TranscriberHolder` is constructed so the holder's `init` reads
+        // whatever the migration writes to `jot.defaultModelID`. Idempotent
+        // — re-runs are no-ops once `pinChecked` is set. Inputs are
+        // computed once and reused for the holder's `installedModelIDs`
+        // seed so a single cache scan covers both.
+        //
+        // §3.4.4 freshness signals: explicit key set, any Parakeet bundle
+        // cached, or recordings on disk. The recordings check uses
+        // FileManager directly rather than touching SwiftData; tests
+        // override it via `seamOverrides.recordingsDirectoryEmpty`.
+        let installedModelIDs: Set<ParakeetModelID> = overrides?.installedModelIDs
+            ?? Set(ParakeetModelID.allCases.filter { ModelCache.shared.isCached($0) })
+        let recordingsDirectoryEmpty: Bool = overrides?.recordingsDirectoryEmpty ?? {
+            let appSupport = systemServices.fileManager
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let recordingsDir = appSupport.appendingPathComponent("Jot/Recordings", isDirectory: true)
+            guard systemServices.fileManager.fileExists(atPath: recordingsDir.path) else { return true }
+            let contents = (try? systemServices.fileManager.contentsOfDirectory(atPath: recordingsDir.path)) ?? []
+            return contents.isEmpty
+        }()
+        ModelChoiceMigration.runV17PinIfNeeded(
+            defaults: systemServices.userDefaults,
+            installedModelIDs: installedModelIDs,
+            recordingsDirectoryEmpty: recordingsDirectoryEmpty
+        )
+        // TODO(streaming-migration): `runV20DefaultStampIfNeeded` is
+        // deliberately NOT wired right now. Streaming is shipped as
+        // an "Experimental" opt-in; the v3 (multilingual) default for
+        // fresh installs is intentional. Revisit when streaming is
+        // ready to graduate from experimental — at that point this
+        // migration would stamp `jot.defaultModelID =
+        // "tdt_0_6b_v2_en_streaming"` for fresh English-speaking
+        // installs on macOS 26+. Until then, fresh installs land on
+        // v3 and users opt in to streaming explicitly via Settings →
+        // Transcription. See `Sources/Transcription/ModelChoiceMigration.swift`
+        // for the migration helper itself.
+
         // Phase 3 F4: TranscriberHolder is the single source of truth for
         // the active model. Production: factory builds a fresh
         // `Transcriber(modelID:)` per swap. Harness: `overrides?.transcriber`
@@ -226,9 +273,16 @@ enum JotComposition {
                 if let override = overrides?.transcriber {
                     return override
                 }
+                if modelID.supportsStreaming,
+                   let streamingURL = ModelCache.shared.streamingPartialCacheURL(for: modelID) {
+                    return DualPipelineTranscriber(
+                        batch: Transcriber(modelID: modelID),
+                        streaming: StreamingTranscriber(bundleDirectory: streamingURL)
+                    )
+                }
                 return Transcriber(modelID: modelID)
             },
-            installedModelIDs: overrides?.installedModelIDs
+            installedModelIDs: installedModelIDs
         )
         let urlSession = overrides?.urlSession ?? URLSession(configuration: systemServices.urlSessionConfiguration)
         let appleIntelligence: any AppleIntelligenceClienting = overrides?.appleIntelligence ?? AppleIntelligenceClient()
