@@ -2,17 +2,23 @@ import AVFoundation
 import KeyboardShortcuts
 import SwiftUI
 
-/// Step 6 — end-to-end smoke test driven by the *real* hotkey. The user
-/// presses their configured `.toggleRecording` binding to start, speaks,
-/// then presses it again to stop. Jot transcribes and displays the
-/// result.
+/// Step 5 (merged) — "your dictation shortcut" + "try your hotkey" in
+/// one page. Shows the current `.toggleRecording` binding (single-key
+/// chosen by `SingleKeyMigration` — Caps Lock on fresh installs — plus
+/// the optional chord), exposes inline controls to change either, and
+/// then drives an end-to-end smoke test from the *real* hotkey press.
 ///
-/// Why hotkey-driven (and not an in-app Test button): the button bypasses
-/// the global event tap and Input Monitoring permission, so it passes
-/// even when the real dictation hotkey would silently fail. Forcing the
-/// user to press the actual hotkey here proves three things in one step:
-/// the binding is correct, Input Monitoring is granted, and the global
-/// tap is firing.
+/// Why merged: users were setting a binding on the previous "Shortcuts"
+/// step, hitting Continue, and only verifying it on the next "Test"
+/// step — which made the relationship between the two pages confusing
+/// (especially after single-key + chord became dual bindings).
+///
+/// Why hotkey-driven test (and not an in-app Test button): the button
+/// bypasses the global event tap and Input Monitoring permission, so
+/// it passes even when the real dictation hotkey would silently fail.
+/// Forcing the user to press the actual hotkey here proves three
+/// things in one step: the binding is correct, Input Monitoring is
+/// granted, and the global tap is firing.
 ///
 /// We commandeer the `.toggleRecording` handler on appear via
 /// `HotkeyRouter.setToggleRecordingOverride(...)` and restore the
@@ -39,26 +45,43 @@ struct TestStep: View {
     @State private var hotkeyDidFire: Bool = false
     @State private var showTimeoutHint: Bool = false
     @State private var timeoutTask: Task<Void, Never>?
+    /// Bumped by the inline `KeyboardShortcuts.Recorder`'s onChange so
+    /// `shortcutDisplay` re-evaluates after a chord edit. `@AppStorage`
+    /// handles the single-key half reactively on its own.
+    @State private var bindingsRefreshToken: Int = 0
+    /// Read live so the displayed hotkey reflects edits the user may
+    /// make in a different Settings window between wizard runs.
+    @AppStorage(SingleKey.storageKey) private var toggleSingleKey: SingleKey = .none
 
     private var selectedModel: ParakeetModelID {
         holder.primaryModelID
     }
 
+    /// The hotkey shown in the big chip. Single-key beats chord — on a
+    /// fresh install that's Caps Lock; an existing user who customized
+    /// to a chord sees their chord; if both are set, single-key wins
+    /// (it's the "first-class" 1.9+ default).
     private var shortcutDisplay: String {
-        KeyboardShortcuts.getShortcut(for: .toggleRecording)?.description ?? "(not set)"
+        _ = bindingsRefreshToken
+        if toggleSingleKey != .none {
+            return toggleSingleKey.displayName
+        }
+        return KeyboardShortcuts.getShortcut(for: .toggleRecording)?.description ?? "(not set)"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Try your hotkey")
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Your dictation shortcut")
                     .font(.system(size: 22, weight: .semibold))
-                Text("Press the hotkey shown below to start recording. Speak a sentence. Press the same hotkey again to stop — Jot will transcribe and show what it heard.")
-                    .font(.system(size: 12))
+                Text("Press your hotkey from any app to start and stop recording. Change it if you want, then test it below.")
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .textSelection(.enabled)
+
+            bindingControls
 
             remediationBanner
 
@@ -86,6 +109,49 @@ struct TestStep: View {
         }
     }
 
+    // MARK: - Binding controls
+
+    /// Inline single-key picker + chord recorder for `.toggleRecording`.
+    /// Changes here write to `@AppStorage` / `UserDefaults` and
+    /// `HotkeyRouter.applySingleKeys()` rebinds on the next
+    /// `UserDefaults.didChangeNotification` tick — so the next press
+    /// of the new binding fires the wizard's test override correctly.
+    @ViewBuilder
+    private var bindingControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Picker("", selection: $toggleSingleKey) {
+                    Text(SingleKey.none.displayName).tag(SingleKey.none)
+                    Divider()
+                    ForEach(SingleKey.Action.toggleRecording.pickerCases) { key in
+                        Text(key.displayName).tag(key)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 200)
+                Text("or")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                KeyboardShortcuts.Recorder(for: .toggleRecording) { _ in
+                    bindingsRefreshToken &+= 1
+                }
+                Spacer(minLength: 0)
+            }
+            Text("Either fires recording. Change anytime in Settings → Shortcuts.")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+    }
+
     // MARK: - Banner
 
     @ViewBuilder
@@ -99,14 +165,14 @@ struct TestStep: View {
                 VStack(alignment: .leading, spacing: 4) {
                     if !mic {
                         Text("Microphone permission is not granted.")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                         Button("Go back to Permissions") {
                             coordinator.goTo(.permissions)
                         }
                         .controlSize(.small)
                     } else {
                         Text("Model isn't downloaded yet.")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                         Button("Go back to Model") {
                             coordinator.goTo(.model)
                         }
@@ -127,17 +193,12 @@ struct TestStep: View {
 
     @ViewBuilder
     private var hotkeyCard: some View {
-        VStack(spacing: 10) {
-            Text("YOUR HOTKEY")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .tracking(0.5)
-
+        VStack(spacing: 14) {
             Text(shortcutDisplay)
-                .font(.system(size: 32, weight: .semibold, design: .rounded))
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
                 .foregroundStyle(hotkeyForeground)
-                .padding(.horizontal, 28)
-                .padding(.vertical, 14)
+                .padding(.horizontal, 26)
+                .padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(hotkeyBackground)
@@ -148,12 +209,33 @@ struct TestStep: View {
                 )
 
             Text(calloutText)
-                .font(.system(size: 12, weight: phase == .recording ? .semibold : .regular))
-                .foregroundStyle(phase == .recording ? .red : .secondary)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(calloutColor)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    /// Callout text color tracks phase the same way the chip does —
+    /// red while recording so the "stop" instruction reads as the
+    /// active concern, otherwise secondary.
+    private var calloutColor: Color {
+        switch phase {
+        case .recording: return .red
+        case .transcribing: return .accentColor
+        default: return .secondary
+        }
     }
 
     private var hotkeyForeground: Color {
@@ -201,9 +283,9 @@ struct TestStep: View {
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Hotkey didn't fire?")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                 Text("Most often this means Input Monitoring isn't granted. Go back to Permissions and make sure Jot is checked in System Settings → Privacy & Security → Input Monitoring (add manually via + → Applications if it's not listed).")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Go back to Permissions") {
@@ -231,29 +313,30 @@ struct TestStep: View {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Transcribing…")
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
         case .done:
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 if transcript.isEmpty {
                     Text("Didn't catch anything — try again and speak a little louder.")
-                        .font(.system(size: 12))
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
-                        Text("Looks good — your hotkey, mic, and model all work.")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 14))
+                        Text("Your hotkey, mic, and model all work.")
+                            .font(.system(size: 13, weight: .medium))
                     }
-                    Text("You said:")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                    Text("YOU SAID")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .tracking(0.6)
                     Text(transcript)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(size: 13))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
@@ -272,7 +355,7 @@ struct TestStep: View {
                         Text("Test failed.")
                     }
                 }
-                .font(.system(size: 12))
+                .font(.system(size: 13))
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
             }

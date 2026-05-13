@@ -123,6 +123,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // already constructed; this binds the runtime channel between
         // them.
         services.delivery.bind(recorder: services.recorder)
+        // One-shot migration to the v1.9 dual-binding hotkey model
+        // (chord + single-key). Must run BEFORE `hotkeyRouter.activate()`
+        // so the router's first `applySingleKeys()` reads the
+        // migration-installed default.
+        SingleKeyMigration.runIfNeeded()
         services.hotkeyRouter.activate()
 
         // Deliver the final transcript (transformed if Transform is on,

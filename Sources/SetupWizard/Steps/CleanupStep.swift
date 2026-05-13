@@ -1,16 +1,19 @@
 import SwiftUI
 
 /// Step 7 — informational intro to Auto-correct (Transform) with a live
-/// demo against the user's actual Test-step dictation when available.
+/// demo against a bundled sample transcript (representative of real
+/// dictation: filled with "um"/"uh"/"like"/"you know" disfluencies).
 ///
 /// UX contract:
-///   • Always shows the title, disclaimer card, and the "how to enable"
-///     pointer — this is the stable teaching moment.
-///   • If `coordinator.testTranscript` is non-empty, adds a demo block with
-///     the raw transcript + a "Preview cleanup" button. On press we call
-///     `LLMClient.transform(...)` with the user's current configuration
-///     (Apple Intelligence by default on macOS 26+, cloud provider if
-///     they've set one). The cleaned result appears beneath the raw block.
+///   • Always shows the title, demo card, disclaimer card, and the
+///     "how to enable" pointer — this is the stable teaching moment.
+///   • The demo always uses `Self.sampleTranscript`, not the user's
+///     Test-step dictation, so every user sees the same clean before/
+///     after pair regardless of how they tested earlier. Click
+///     "Preview cleanup" to call `LLMClient.transform(...)` with the
+///     user's current configuration (Apple Intelligence by default on
+///     macOS 26+, cloud provider if they've set one). The cleaned
+///     result appears beneath the raw block.
 ///   • If the preview fails (no API key for a cloud provider, Apple
 ///     Intelligence unavailable, etc.) we show the error inline — it's
 ///     informative, not blocking.
@@ -24,6 +27,12 @@ struct CleanupStep: View {
     @State private var phase: PreviewPhase = .idle
     @State private var cleanedText: String = ""
     @State private var errorMessage: String?
+
+    /// Bundled sample transcript. Mirrors the shape of real dictation —
+    /// filler words, restarts, the kind of sloppy phrasing Cleanup is
+    /// designed to fix. Kept short so the before/after stack fits in
+    /// the wizard card without scrolling.
+    private static let sampleTranscript = "so um yeah I was just thinking we should probably you know talk about the project timeline like I'm not sure if we're on track for the deadline next month"
 
     /// LLM dispatch resolved from coordinator-injected deps (set up by
     /// `WizardPresenter.present(...)`). Replaces the previous lazy
@@ -54,10 +63,7 @@ struct CleanupStep: View {
             }
             .textSelection(.enabled)
 
-            if let transcript = coordinator.testTranscript,
-               !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                demoCard(for: transcript)
-            }
+            demoCard(for: Self.sampleTranscript)
 
             // Apple-Intelligence-specific quality caveat: only show
             // when the user actually chose Apple Intelligence (either
@@ -155,16 +161,13 @@ struct CleanupStep: View {
     }
 
     private func runPreview() {
-        guard let transcript = coordinator.testTranscript,
-              !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else { return }
         phase = .loading
         cleanedText = ""
         errorMessage = nil
         let service = resolveAIService()
         Task {
             do {
-                let result = try await service.transform(transcript: transcript)
+                let result = try await service.transform(transcript: Self.sampleTranscript)
                 await MainActor.run {
                     cleanedText = result
                     phase = .success

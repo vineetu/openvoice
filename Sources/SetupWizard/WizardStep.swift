@@ -7,7 +7,13 @@ enum WizardStepID: Int, CaseIterable, Identifiable, Sendable {
     case permissions
     case model
     case microphone
-    case shortcuts
+    /// Step 5 — merged "your dictation shortcut" + "try your hotkey".
+    /// The view (TestStep) shows the current binding (Caps Lock single-
+    /// key + chord), inline controls to change either, and the live
+    /// press-to-test surface. Previously these were two adjacent steps
+    /// (`.shortcuts` + `.test`) — merged because users found it
+    /// confusing to set a binding on one page and only verify it on
+    /// the next.
     case test
     // Terminal "you're set up for the basics" card shown right after
     // the Test step succeeds. Skip is the suggested first-run action —
@@ -30,13 +36,20 @@ enum WizardStepID: Int, CaseIterable, Identifiable, Sendable {
     case aiProvider
     case cleanup
     case rewriteIntro
+    /// Rewrite-with-voice demo #1 — "Make this into three bullet
+    /// points." Drives the production voice-capture + transcribe +
+    /// rewrite pipeline against a bundled draft.
+    case rewriteWithVoiceBullets
+    /// Rewrite-with-voice demo #2 — "Translate this to Spanish."
+    /// Last step of the wizard.
+    case rewriteWithVoiceSpanish
 
     var id: Int { rawValue }
 
     static var totalCount: Int { allCases.count }
 
     var isFirst: Bool { self == .welcome }
-    var isLast: Bool { self == .rewriteIntro }
+    var isLast: Bool { self == .rewriteWithVoiceSpanish }
 }
 
 /// Read-only snapshot of step presentation that the wizard shell consumes

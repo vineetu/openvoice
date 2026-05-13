@@ -10,7 +10,7 @@ push-to-talk: hold hotkey record, release stop. Unbound default.
 cancel-recording: Esc discards. Active only while recording, never steals Esc when idle.
 any-length: no hard limit. Quality diminishes past ~1 hr; shorter sessions best.
 on-device-transcription: Parakeet on Apple Neural Engine. Audio stays on Mac. Model downloads first use.
-streaming-preview: English-only v2 model — recommended for new installs, experimental. Pairs batch ASR with EOU 120M streaming encoder for live partial transcript in the pill. Degrades to batch on cold ANE.
+streaming-preview: English-only v2 model — recommended for new installs, experimental. Live partial transcript in the pill; degrades to batch on cold ANE.
 multilingual: 25 European langs, auto-detected per recording.
 languages: Jot supports these ASR models — pick one as primary at Settings → Transcription. Only the primary is hot in memory; switching unloads + reloads.
 <!-- FRAGMENT: jot-asr-languages -->
@@ -32,7 +32,7 @@ articulate-intent-classifier: routes instruction into four branches — voice-pr
 Both use configured AI provider (same as Cleanup).
 
 ## Shortcuts
-modifier-required: macOS requires modifier (⌘ ⌥ ⌃ ⇧) on global hotkeys. Single-key bindings impossible.
+modifier-required: chord shortcuts need a modifier (⌘ ⌥ ⌃ ⇧). Single-key triggers (Caps Lock default, also Fn / right-modifier keys) use a separate path — Settings → Shortcuts → Toggle recording → Single key. Caps Lock's LED is the recording indicator.
 hotkey-stopped-working: hotkey produces Unicode char (≤, ÷) when another app grabbed it while Jot was off. Re-register in Settings → Shortcuts.
 Defaults: toggle-recording ⌥Space (Option+Space); push-to-talk unbound; articulate-custom ⌥. (Option+Period); articulate-fixed ⌥/ (Option+Slash); paste-last ⌥, (Option+Comma).
 shortcuts: bindings in Settings → Shortcuts. Cancel (Esc) hardcoded.
@@ -48,7 +48,7 @@ Library items (recordings + rewrite sessions) and transcripts kept on-device, co
 
 ## Troubleshooting
 permissions: Mic, Input Monitoring, Accessibility.
-input-monitoring-not-listed: if Jot missing from System Settings → Privacy & Security → Input Monitoring, click + → Applications → Jot. macOS doesn't always auto-populate.
+input-monitoring-not-listed: if Jot is missing from System Settings → Privacy & Security → Input Monitoring, click + → Applications → Jot.
 bluetooth-redirect: actionable error on Bluetooth mic drop.
 recording-wont-start: fix on card.
 hotkey-stopped-working: re-register steps on card.

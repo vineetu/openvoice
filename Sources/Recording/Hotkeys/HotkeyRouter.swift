@@ -35,6 +35,24 @@ final class HotkeyRouter {
     /// press.
     private var toggleRecordingOverride: (() -> Void)?
 
+    /// When non-nil, every `.rewrite` and `.rewriteWithVoice` press
+    /// routes here instead of into `rewriteController.rewrite()` /
+    /// `.toggle()`. The Setup Wizard's RewriteIntroStep sets this on
+    /// appear so pressing either rewrite hotkey fires the wizard demo
+    /// against bundled sample text instead of running the real
+    /// selection-capture pipeline (which would target whatever app is
+    /// behind the wizard window). Single handler for both names —
+    /// callers don't care which path fired.
+    private var rewriteOverride: (() -> Void)?
+
+    /// One single-key handler per `SingleKey.Action`. Each lives alongside
+    /// the corresponding Carbon-backed chord handler — either binding
+    /// fires the action. Reads its key from
+    /// `@AppStorage(SingleKey.Action.<case>.storageKey)`; changes to any
+    /// of those defaults trigger `applySingleKeys()` via the observer.
+    private var singleKeyHotkeys: [SingleKey.Action: SingleKeyHotkey] = [:]
+    private var singleKeyObserver: AnyCancellable?
+
     init(recorder: RecorderController, delivery: DeliveryService, rewriteController: RewriteController? = nil) {
         self.recorder = recorder
         self.delivery = delivery
@@ -47,6 +65,18 @@ final class HotkeyRouter {
         activated = true
 
         installToggleRecording()
+        applySingleKeys()
+        // Observe UserDefaults so a Settings → Shortcuts edit takes
+        // effect without an app relaunch. Any of the five
+        // `SingleKey.Action.<case>.storageKey` keys can change; we
+        // rebind all of them on any defaults change (cheap — five
+        // `bind()` calls, each is O(1) when the key hasn't actually
+        // changed).
+        singleKeyObserver = NotificationCenter.default
+            .publisher(for: UserDefaults.didChangeNotification)
+            .sink { [weak self] _ in
+                self?.applySingleKeys()
+            }
 
         KeyboardShortcuts.onKeyDown(for: .cancelRecording) { [weak self] in
             guard let self else { return }
@@ -99,7 +129,11 @@ final class HotkeyRouter {
         }
 
         if let rewriteController {
-            KeyboardShortcuts.onKeyDown(for: .rewriteWithVoice) { [weak rewriteController] in
+            KeyboardShortcuts.onKeyDown(for: .rewriteWithVoice) { [weak self, weak rewriteController] in
+                if let override = self?.rewriteOverride {
+                    override()
+                    return
+                }
                 guard let rewriteController else { return }
                 Task { @MainActor in
                     await rewriteController.toggle()
@@ -110,7 +144,11 @@ final class HotkeyRouter {
             // the literal "Rewrite this" instruction (no voice step, no
             // classifier). Shares the selection-capture + paste-back path
             // with Rewrite with Voice.
-            KeyboardShortcuts.onKeyDown(for: .rewrite) { [weak rewriteController] in
+            KeyboardShortcuts.onKeyDown(for: .rewrite) { [weak self, weak rewriteController] in
+                if let override = self?.rewriteOverride {
+                    override()
+                    return
+                }
                 guard let rewriteController else { return }
                 Task { @MainActor in
                     await rewriteController.rewrite()
@@ -193,6 +231,208 @@ final class HotkeyRouter {
     /// the next press goes back to `recorder.toggle()`.
     func clearToggleRecordingOverride() {
         toggleRecordingOverride = nil
+    }
+
+    /// Route every `.rewrite` and `.rewriteWithVoice` press to `handler`
+    /// instead of the production rewrite pipeline. Used by the Setup
+    /// Wizard's RewriteIntroStep so the user can fire the demo against
+    /// bundled sample text using their real hotkey. Pair with
+    /// `clearRewriteOverride()` on disappear.
+    func setRewriteOverride(_ handler: @escaping () -> Void) {
+        rewriteOverride = handler
+    }
+
+    /// Stop routing rewrite hotkey presses through the override —
+    /// production rewrite resumes on the next press.
+    func clearRewriteOverride() {
+        rewriteOverride = nil
+    }
+
+    /// Wire each `SingleKey.Action`'s `SingleKeyHotkey` to whatever the
+    /// user has chosen in Settings → Shortcuts (or what migration set on
+    /// first launch). Idempotent — safe to call on every `UserDefaults`
+    /// change. Each action's callbacks are state-gated so a desync (e.g.
+    /// Esc-cancel mid-recording while Caps Lock LED is still on) doesn't
+    /// fire spurious actions on the next press.
+    func applySingleKeys() {
+        for action in SingleKey.Action.allCases {
+            applySingleKey(for: action)
+        }
+    }
+
+    private func applySingleKey(for action: SingleKey.Action) {
+        let raw = UserDefaults.standard.string(forKey: action.storageKey)
+            ?? SingleKey.none.rawValue
+        let key = SingleKey(rawValue: raw) ?? .none
+
+        let hotkey = singleKeyHotkeys[action] ?? {
+            let h = SingleKeyHotkey()
+            singleKeyHotkeys[action] = h
+            return h
+        }()
+
+        if key == .none {
+            hotkey.unbind()
+            return
+        }
+
+        switch action {
+        case .toggleRecording:
+            bindToggleRecording(hotkey: hotkey, key: key)
+        case .pushToTalk:
+            bindPushToTalk(hotkey: hotkey, key: key)
+        case .pasteLastTranscription:
+            bindPasteLast(hotkey: hotkey, key: key)
+        case .rewriteWithVoice:
+            bindRewriteWithVoice(hotkey: hotkey, key: key)
+        case .rewrite:
+            bindRewrite(hotkey: hotkey, key: key)
+        }
+    }
+
+    private func bindToggleRecording(hotkey: SingleKeyHotkey, key: SingleKey) {
+        hotkey.bind(
+            key,
+            mode: SingleKey.Action.toggleRecording.mode,
+            onStart: { [weak self] in
+                guard let self else { return }
+                self.log.info("singleKey toggleRecording \(key.rawValue, privacy: .public) → start")
+                Task { @MainActor in
+                    // Honor the wizard Test step's commandeer flag —
+                    // single-key path mirrors the chord override contract.
+                    if let override = self.toggleRecordingOverride {
+                        override()
+                        return
+                    }
+                    switch self.recorder.state {
+                    case .idle, .error:
+                        if case .error = self.recorder.state {
+                            self.recorder.clearError()
+                        }
+                        await self.recorder.toggle()
+                    case .recording, .transcribing, .transforming:
+                        break
+                    }
+                }
+            },
+            onStop: { [weak self] in
+                guard let self else { return }
+                self.log.info("singleKey toggleRecording \(key.rawValue, privacy: .public) → stop")
+                Task { @MainActor in
+                    if let override = self.toggleRecordingOverride {
+                        override()
+                        return
+                    }
+                    switch self.recorder.state {
+                    case .recording:
+                        await self.recorder.toggle()
+                    case .idle, .error, .transcribing, .transforming:
+                        break
+                    }
+                }
+            }
+        )
+    }
+
+    private func bindPushToTalk(hotkey: SingleKeyHotkey, key: SingleKey) {
+        hotkey.bind(
+            key,
+            mode: SingleKey.Action.pushToTalk.mode,
+            onStart: { [weak self] in
+                guard let self else { return }
+                self.log.info("singleKey pushToTalk \(key.rawValue, privacy: .public) → down")
+                self.pttPendingRelease = false
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if case .idle = self.recorder.state {
+                        await self.recorder.toggle()
+                    } else if case .error = self.recorder.state {
+                        self.recorder.clearError()
+                        await self.recorder.toggle()
+                    }
+                    if self.pttPendingRelease, case .recording = self.recorder.state {
+                        await self.recorder.toggle()
+                        self.pttPendingRelease = false
+                    }
+                }
+            },
+            onStop: { [weak self] in
+                guard let self else { return }
+                self.log.info("singleKey pushToTalk \(key.rawValue, privacy: .public) → up")
+                self.pttPendingRelease = true
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if case .recording = self.recorder.state {
+                        await self.recorder.toggle()
+                        self.pttPendingRelease = false
+                    }
+                }
+            }
+        )
+    }
+
+    private func bindPasteLast(hotkey: SingleKeyHotkey, key: SingleKey) {
+        hotkey.bind(
+            key,
+            mode: SingleKey.Action.pasteLastTranscription.mode,
+            onStart: { [weak self] in
+                guard let self else { return }
+                self.log.info("singleKey pasteLastTranscription \(key.rawValue, privacy: .public) → fire")
+                Task { @MainActor in await self.delivery.pasteLast() }
+            }
+        )
+    }
+
+    private func bindRewriteWithVoice(hotkey: SingleKeyHotkey, key: SingleKey) {
+        guard let rewriteController else {
+            hotkey.unbind()
+            return
+        }
+        hotkey.bind(
+            key,
+            mode: SingleKey.Action.rewriteWithVoice.mode,
+            // Both edges call `.toggle()` — RewriteController owns its
+            // own state machine; pressing tap-1 starts capture, tap-2
+            // finishes it. The SingleKeyHotkey's synthetic toggle
+            // alternates onStart/onStop on each ON edge, so wiring both
+            // to `.toggle()` means every press hands control back to the
+            // controller, which decides what to do based on its state.
+            onStart: { [weak self, weak rewriteController] in
+                if let override = self?.rewriteOverride {
+                    override()
+                    return
+                }
+                guard let rewriteController else { return }
+                Task { @MainActor in await rewriteController.toggle() }
+            },
+            onStop: { [weak self, weak rewriteController] in
+                if let override = self?.rewriteOverride {
+                    override()
+                    return
+                }
+                guard let rewriteController else { return }
+                Task { @MainActor in await rewriteController.toggle() }
+            }
+        )
+    }
+
+    private func bindRewrite(hotkey: SingleKeyHotkey, key: SingleKey) {
+        guard let rewriteController else {
+            hotkey.unbind()
+            return
+        }
+        hotkey.bind(
+            key,
+            mode: SingleKey.Action.rewrite.mode,
+            onStart: { [weak self, weak rewriteController] in
+                if let override = self?.rewriteOverride {
+                    override()
+                    return
+                }
+                guard let rewriteController else { return }
+                Task { @MainActor in await rewriteController.rewrite() }
+            }
+        )
     }
 
     private func updateCancelEnablement(

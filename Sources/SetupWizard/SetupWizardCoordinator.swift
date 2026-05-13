@@ -113,14 +113,15 @@ final class SetupWizardCoordinator: ObservableObject {
             return state.permissionGrants[.microphone] == .granted
         case .model:
             return state.installedModelIDs.contains(state.primaryModelID)
-        case .microphone, .shortcuts, .test:
-            // Microphone (device picker), Shortcuts (defaults pre-set),
-            // and Test (3-second recording is optional) all advance
-            // unconditionally. View-side may temporarily hold the
-            // Primary disabled while a recording is in flight — that's
-            // chrome-level state, not a precondition.
+        case .microphone, .test:
+            // Microphone (device picker) and the merged shortcut +
+            // test step both advance unconditionally. View-side may
+            // temporarily hold the Primary disabled while a recording
+            // is in flight — that's chrome-level state, not a
+            // precondition.
             return true
-        case .done, .vocabulary, .aiProvider, .cleanup, .rewriteIntro:
+        case .done, .vocabulary, .aiProvider, .cleanup, .rewriteIntro,
+             .rewriteWithVoiceBullets, .rewriteWithVoiceSpanish:
             // Post-basics walkthrough steps. No persistent precondition.
             return true
         }
